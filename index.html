@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Campo de partículas — instrumento de mano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#080A12;
+    --ink-2:#0F1320;
+    --line:rgba(232,230,223,.18);
+    --paper:#E8E6DF;
+    --dim:rgba(232,230,223,.52);
+    --faint:rgba(232,230,223,.30);
+    --signal:#57E0D6;
+    --hot:#F2A65A;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---- capas ---- */
+  #stage{position:fixed; inset:0}
+  #cam{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; transform:scaleX(-1);
+    filter:saturate(.55) contrast(1.05) brightness(.62);
+  }
+  #skeleton,#gl{position:absolute; inset:0; width:100%; height:100%}
+  #gl{pointer-events:none}
+  #vignette{
+    position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(120% 90% at 50% 45%, transparent 35%, rgba(8,10,18,.72) 100%),
+      linear-gradient(180deg, rgba(8,10,18,.55) 0%, transparent 22%, transparent 70%, rgba(8,10,18,.65) 100%);
+  }
+  /* rejilla de instrumento: la firma visual */
+  #grid{
+    position:absolute; inset:0; pointer-events:none; opacity:.20;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:64px 64px;
+    mask-image:radial-gradient(70% 60% at 50% 50%, #000 0%, transparent 78%);
+    -webkit-mask-image:radial-gradient(70% 60% at 50% 50%, #000 0%, transparent 78%);
+  }
+
+  /* ---- tipografía / cabecera ---- */
+  header{
+    position:absolute; top:28px; left:32px; max-width:min(330px,42vw);
+    pointer-events:none;
+  }
+  h1{
+    font-family:"Bodoni Moda",Didot,serif;
+    font-weight:400; font-style:italic;
+    font-size:clamp(26px,3.4vw,42px);
+    line-height:.98; margin:0 0 10px;
+    letter-spacing:.01em;
+  }
+  .eyebrow{
+    font-size:10px; letter-spacing:.34em; text-transform:uppercase;
+    color:var(--signal); margin:0 0 18px;
+  }
+  .legend{margin:0; font-size:11.5px; line-height:1.75; color:var(--dim)}
+  .legend b{color:var(--paper); font-weight:500}
+
+  /* ---- lectura de estado ---- */
+  .readout{
+    position:absolute; bottom:30px; left:32px;
+    width:238px; padding:14px 16px;
+    background:rgba(15,19,32,.66);
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid var(--line);
+    font-size:11px;
+  }
+  .row{display:flex; justify-content:space-between; align-items:baseline; padding:5px 0}
+  .row + .row{border-top:1px dotted rgba(232,230,223,.13)}
+  .k{color:var(--faint); letter-spacing:.16em; text-transform:uppercase; font-size:9.5px}
+  .v{font-weight:600; letter-spacing:.02em}
+  .v.sig{color:var(--signal)}
+  .v.hot{color:var(--hot)}
+
+  /* ---- selector de forma ---- */
+  .shapes{
+    position:absolute; bottom:34px; left:50%; transform:translateX(-50%);
+    display:flex; gap:2px; padding:4px;
+    background:rgba(15,19,32,.66);
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid var(--line);
+  }
+  .shapes button{
+    appearance:none; border:0; cursor:pointer;
+    background:transparent; color:var(--dim);
+    font:inherit; font-size:10px; font-weight:500;
+    letter-spacing:.2em; text-transform:uppercase;
+    padding:9px 15px; display:flex; gap:8px; align-items:center;
+    transition:color .18s, background .18s;
+  }
+  .shapes button i{
+    font-style:normal; font-size:9px;
+    width:15px; height:15px; display:grid; place-items:center;
+    border:1px solid var(--line); color:var(--faint);
+    transition:all .18s;
+  }
+  .shapes button:hover{color:var(--paper)}
+  .shapes button[aria-pressed="true"]{color:var(--ink); background:var(--signal)}
+  .shapes button[aria-pressed="true"] i{border-color:var(--ink); color:var(--ink)}
+  .shapes button:focus-visible{outline:2px solid var(--hot); outline-offset:2px}
+
+  /* ---- estado de arranque / permiso ---- */
+  #boot{
+    position:absolute; inset:0; z-index:20;
+    display:grid; place-items:center; text-align:center;
+    background:var(--ink);
+  }
+  #boot .card{max-width:420px; padding:0 28px}
+  #boot p{font-size:12px; line-height:1.8; color:var(--dim); margin:14px 0 24px}
+  #boot .status{color:var(--signal); font-size:10px; letter-spacing:.3em; text-transform:uppercase}
+  #boot button{
+    appearance:none; cursor:pointer; font:inherit;
+    font-size:11px; letter-spacing:.22em; text-transform:uppercase; font-weight:600;
+    padding:13px 26px; border:1px solid var(--signal);
+    background:transparent; color:var(--signal);
+    transition:background .18s, color .18s;
+  }
+  #boot button:hover{background:var(--signal); color:var(--ink)}
+  #boot.hidden{display:none}
+  .err{color:var(--hot)!important}
+
+  @media (max-width:720px){
+    header{top:18px; left:18px; max-width:60vw}
+    .legend{display:none}
+    .readout{left:18px; bottom:96px; width:190px}
+    .shapes{bottom:20px}
+    .shapes button{padding:8px 9px; letter-spacing:.1em}
+    .shapes button span{display:none}
+    #grid{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="gl"></canvas>
+  <canvas id="skeleton"></canvas>
+  <div id="grid"></div>
+  <div id="vignette"></div>
+
+  <header>
+    <p class="eyebrow">Instrumento reactivo</p>
+    <h1>Campo de<br>partículas</h1>
+    <p class="legend">
+      <b>Mano abierta</b> — mueve y rota la figura.<br>
+      <b>Cierra el puño</b> — comprime y carga energía.<br>
+      <b>Abre de golpe</b> — libera la explosión.<br>
+      <b>Dos manos</b> — separa o junta para escalar.<br>
+      <b>Teclas 1–4</b> — cambia de forma.
+    </p>
+  </header>
+
+  <div class="readout">
+    <div class="row"><span class="k">Forma</span><span class="v" id="r-shape">Esfera</span></div>
+    <div class="row"><span class="k">Manos</span><span class="v" id="r-hands">0</span></div>
+    <div class="row"><span class="k">Dedos</span><span class="v" id="r-fingers">—</span></div>
+    <div class="row"><span class="k">Gesto</span><span class="v sig" id="r-gesture">en espera</span></div>
+    <div class="row"><span class="k">Carga</span><span class="v hot" id="r-charge">0 %</span></div>
+    <div class="row"><span class="k">FPS</span><span class="v" id="r-fps">—</span></div>
+  </div>
+
+  <nav class="shapes" id="shapes" aria-label="Selector de forma">
+    <button data-shape="0" aria-pressed="true"><i>1</i><span>Esfera</span></button>
+    <button data-shape="1" aria-pressed="false"><i>2</i><span>Cubo</span></button>
+    <button data-shape="2" aria-pressed="false"><i>3</i><span>Toro</span></button>
+    <button data-shape="3" aria-pressed="false"><i>4</i><span>Pirámide</span></button>
+  </nav>
+
+  <div id="boot">
+    <div class="card">
+      <p class="eyebrow" style="color:var(--signal)">Instrumento reactivo</p>
+      <h1 style="margin-bottom:6px">Campo de<br>partículas</h1>
+      <p>Necesita tu cámara. El vídeo nunca sale de este dispositivo: el rastreo de manos se ejecuta dentro del navegador.</p>
+      <button id="start">Activar cámara</button>
+      <p class="status" id="status" style="margin-top:22px">Listo</p>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.161.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { HandLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+
+const $ = id => document.getElementById(id);
+const video = $('cam'), boot = $('boot'), statusEl = $('status');
+
+/* ══════════ 1. ESCENA 3D ══════════ */
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, .1, 100);
+camera.position.z = 5;
+
+const COUNT = 7000;
+const CAM_DIST = 5;
+
+// Sprite de partícula generado a mano (sin dependencias externas)
+function makeSprite() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d').createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0,   'rgba(255,255,255,1)');
+  g.addColorStop(.25, 'rgba(255,255,255,.65)');
+  g.addColorStop(1,   'rgba(255,255,255,0)');
+  const ctx = c.getContext('2d'); ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+
+/* ── Generadores de forma: cada partícula recibe una posición objetivo ── */
+const shapes = {
+  0: (i, n) => {                                   // Esfera (Fibonacci)
+    const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(Math.max(0, 1 - y * y));
+    const t = i * Math.PI * (3 - Math.sqrt(5));
+    return [Math.cos(t) * r * 1.15, y * 1.15, Math.sin(t) * r * 1.15];
+  },
+  1: (i) => {                                      // Cubo (superficie)
+    const s = 1.05, f = i % 6, u = (Math.random() * 2 - 1) * s, v = (Math.random() * 2 - 1) * s;
+    return [[s,u,v],[-s,u,v],[u,s,v],[u,-s,v],[u,v,s],[u,v,-s]][f];
+  },
+  2: (i, n) => {                                   // Toro
+    const R = .95, r = .38, a = (i / n) * Math.PI * 2 * 7 % (Math.PI * 2), b = Math.random() * Math.PI * 2;
+    return [(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)];
+  },
+  3: () => {                                       // Pirámide (base + 4 caras)
+    const h = 1.35, s = 1.15, apex = [0, h * .62, 0];
+    const base = [[-s,-h*.38,-s],[s,-h*.38,-s],[s,-h*.38,s],[-s,-h*.38,s]];
+    const f = Math.floor(Math.random() * 5);
+    let A, B, C;
+    if (f === 4) { A = base[0]; B = base[1]; C = base[2]; if (Math.random() < .5) { B = base[2]; C = base[3]; } }
+    else { A = apex; B = base[f]; C = base[(f + 1) % 4]; }
+    let u = Math.random(), v = Math.random();
+    if (u + v > 1) { u = 1 - u; v = 1 - v; }
+    return [0,1,2].map(k => A[k] + u * (B[k] - A[k]) + v * (C[k] - A[k]));
+  }
+};
+const SHAPE_HUE = { 0: .55, 1: .10, 2: .72, 3: .40 };   // esfera cian · cubo ámbar · toro violeta · pirámide verde
+const SHAPE_NAME = { 0: 'Esfera', 1: 'Cubo', 2: 'Toro', 3: 'Pirámide' };
+
+const pos    = new Float32Array(COUNT * 3);   // posición actual
+const target = new Float32Array(COUNT * 3);   // posición deseada
+const vel    = new Float32Array(COUNT * 3);   // velocidad (explosión)
+const col    = new Float32Array(COUNT * 3);
+const seed   = new Float32Array(COUNT);
+
+function setShape(idx) {
+  for (let i = 0; i < COUNT; i++) {
+    const p = shapes[idx](i, COUNT);
+    target[i * 3] = p[0]; target[i * 3 + 1] = p[1]; target[i * 3 + 2] = p[2];
+  }
+  const base = new THREE.Color();
+  for (let i = 0; i < COUNT; i++) {
+    base.setHSL(SHAPE_HUE[idx] + (Math.random() - .5) * .07, .78, .52 + Math.random() * .28);
+    col[i * 3] = base.r; col[i * 3 + 1] = base.g; col[i * 3 + 2] = base.b;
+  }
+  geo.attributes.color.needsUpdate = true;
+  current = idx;
+  $('r-shape').textContent = SHAPE_NAME[idx];
+  [...$('shapes').children].forEach((b, k) => b.setAttribute('aria-pressed', k === idx));
+}
+
+const geo = new THREE.BufferGeometry();
+for (let i = 0; i < COUNT; i++) {
+  seed[i] = Math.random() * 6.28;
+  const a = Math.random() * 6.28, b = Math.random() * 6.28, r = 2.4;
+  pos[i*3] = Math.cos(a)*r; pos[i*3+1] = Math.sin(b)*r; pos[i*3+2] = Math.sin(a)*r;
+}
+geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+
+const points = new THREE.Points(geo, new THREE.PointsMaterial({
+  size: .045, map: makeSprite(), vertexColors: true,
+  transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, sizeAttenuation: true
+}));
+scene.add(points);
+
+let current = 0;
+setShape(0);
+
+/* ══════════ 2. ESTADO DE INTERACCIÓN ══════════ */
+const S = {
+  hands: 0, fingers: 0, gesture: 'en espera',
+  charge: 0,                    // 0→1 al cerrar el puño
+  scale: 1, targetScale: 1,
+  pos: new THREE.Vector3(0, 0, 0), targetPos: new THREE.Vector3(0, 0, 0),
+  quat: new THREE.Quaternion(),  targetQuat: new THREE.Quaternion(),
+  blast: 0,                     // energía de la explosión, decae sola
+  spanBase: null
+};
+
+/* ══════════ 3. CÁMARA + MEDIAPIPE ══════════ */
+let landmarker = null, lastVideoTime = -1;
+
+async function start() {
+  try {
+    statusEl.textContent = 'Pidiendo cámara…'; statusEl.classList.remove('err');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    statusEl.textContent = 'Cargando modelo de manos…';
+    const files = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    landmarker = await HandLandmarker.createFromOptions(files, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'VIDEO', numHands: 2,
+      minHandDetectionConfidence: .5, minTrackingConfidence: .5
+    });
+
+    boot.classList.add('hidden');
+    resize(); loop();
+  } catch (e) {
+    statusEl.classList.add('err');
+    statusEl.textContent = 'No se pudo iniciar: ' + (e.message || e);
+    console.error(e);
+  }
+}
+$('start').addEventListener('click', start);
+
+/* ══════════ 4. LECTURA DE LA MANO ══════════ */
+const TIP = [4, 8, 12, 16, 20], PIP = [3, 6, 10, 14, 18];
+const d3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+function countFingers(w) {                       // w = worldLandmarks (metros, centrados)
+  let n = 0;
+  for (let f = 0; f < 5; f++) {
+    const ref = f === 0 ? w[17] : w[0];          // el pulgar se mide contra el meñique
+    if (d3(w[TIP[f]], ref) > d3(w[PIP[f]], ref) * 1.04) n++;
+  }
+  return n;
+}
+
+// Orientación real de la palma → cuaternión
+const _r = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _m = new THREE.Matrix4();
+function handQuat(w) {
+  const V = i => new THREE.Vector3(-w[i].x, -w[i].y, -w[i].z);   // espejo + y hacia arriba
+  _u.copy(V(9)).sub(V(0)).normalize();                          // muñeca → nudillo medio
+  _r.copy(V(5)).sub(V(17)).normalize();                         // meñique → índice
+  _f.crossVectors(_r, _u).normalize();
+  _r.crossVectors(_u, _f).normalize();
+  _m.makeBasis(_r, _u, _f);
+  return new THREE.Quaternion().setFromRotationMatrix(_m);
+}
+
+/* ══════════ 5. ESQUELETO DIBUJADO SOBRE EL VÍDEO ══════════ */
+const sk = $('skeleton'), sctx = sk.getContext('2d');
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+               [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+function drawSkeleton(hands) {
+  const w = sk.width, h = sk.height;
+  sctx.clearRect(0, 0, w, h);
+  // el vídeo usa object-fit:cover → replicamos el recorte para que el esqueleto encaje
+  const vr = video.videoWidth / video.videoHeight, cr = w / h;
+  const sx = vr > cr ? cr / vr : 1, sy = vr > cr ? 1 : vr / cr;
+  const X = p => (0.5 + (0.5 - p.x) / sx) * w;    // 0.5-x = espejo
+  const Y = p => (0.5 + (p.y - 0.5) / sy) * h;
+
+  for (const lm of hands) {
+    sctx.lineWidth = 1.25;
+    sctx.strokeStyle = 'rgba(87,224,214,.5)';
+    for (const [a, b] of BONES) {
+      sctx.beginPath(); sctx.moveTo(X(lm[a]), Y(lm[a])); sctx.lineTo(X(lm[b]), Y(lm[b])); sctx.stroke();
+    }
+    for (const p of lm) {
+      sctx.fillStyle = 'rgba(232,230,223,.85)';
+      sctx.beginPath(); sctx.arc(X(p), Y(p), 2.4, 0, 6.29); sctx.fill();
+    }
+  }
+}
+
+/* ══════════ 6. BUCLE ══════════ */
+let prevFingers = 5, fps = 60, lastT = performance.now(), frames = 0, fpsT = lastT;
+const viewH = 2 * CAM_DIST * Math.tan(THREE.MathUtils.degToRad(25));
+
+function loop() {
+  requestAnimationFrame(loop);
+  const now = performance.now();
+  const dt = Math.min((now - lastT) / 1000, .05); lastT = now;
+
+  /* --- detección --- */
+  if (landmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const res = landmarker.detectForVideo(video, now);
+    const lms = res.landmarks || [], wlds = res.worldLandmarks || [];
+    S.hands = lms.length;
+    drawSkeleton(lms);
+
+    if (S.hands > 0) {
+      const f = countFingers(wlds[0]);
+      S.fingers = f;
+
+      // posición: centro de la palma → coordenadas del mundo 3D
+      const palm = lms[0][9];
+      const viewW = viewH * (innerWidth / innerHeight);
+      S.targetPos.set((0.5 - palm.x) * viewW * 1.05, (0.5 - palm.y) * viewH * 1.05, 0);
+      S.targetQuat.copy(handQuat(wlds[0]));
+
+      if (S.hands === 2) {                                   // escalar con dos manos
+        const span = Math.hypot(lms[0][9].x - lms[1][9].x, lms[0][9].y - lms[1][9].y);
+        if (S.spanBase === null) S.spanBase = span;
+        S.targetScale = THREE.MathUtils.clamp(span / S.spanBase, .35, 2.6);
+        S.gesture = 'escalar';
+      } else {
+        S.spanBase = null;
+        if (f <= 1) {                                        // puño → cargar
+          S.charge = Math.min(1, S.charge + dt * 1.7);
+          S.gesture = 'cargando';
+        } else {
+          if (prevFingers <= 1 && f >= 3 && S.charge > .15) { // soltar → estallido
+            S.blast = S.charge * 3.4;
+            S.gesture = 'explosión';
+          } else if (S.blast < .2) {
+            S.gesture = f >= 4 ? 'mover / rotar' : 'apuntando';
+          }
+          S.charge = Math.max(0, S.charge - dt * 2.2);
+        }
+      }
+      prevFingers = f;
+    } else {
+      S.fingers = 0; S.spanBase = null;
+      S.charge = Math.max(0, S.charge - dt * 1.5);
+      S.targetPos.set(0, 0, 0);
+      S.targetQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), now * .0002);
+      S.gesture = 'en espera';
+    }
+  }
+
+  /* --- suavizado del objeto --- */
+  S.pos.lerp(S.targetPos, .14);
+  S.quat.slerp(S.targetQuat, .13);
+  S.scale += (S.targetScale - S.scale) * .12;
+  points.position.copy(S.pos);
+  points.quaternion.copy(S.quat);
+
+  S.blast = Math.max(0, S.blast - dt * 2.0);
+
+  /* --- física de las partículas --- */
+  const squeeze = 1 - S.charge * .55;                         // el puño comprime
+  const P = geo.attributes.position.array;
+  const t = now * .001;
+
+  for (let i = 0; i < COUNT; i++) {
+    const j = i * 3;
+    // objetivo = forma · compresión · escala, con un temblor orgánico
+    const s = seed[i];
+    const wob = .012 * (1 + S.charge * 4);
+    const tx = target[j]   * squeeze * S.scale + Math.sin(t * 1.7 + s) * wob;
+    const ty = target[j+1] * squeeze * S.scale + Math.cos(t * 1.4 + s * 1.3) * wob;
+    const tz = target[j+2] * squeeze * S.scale + Math.sin(t * 1.9 + s * .7) * wob;
+
+    if (S.blast > 0.01) {                                     // impulso radial
+      const d = Math.hypot(P[j], P[j+1], P[j+2]) || 1;
+      const k = S.blast * dt * 9;
+      vel[j]   += (P[j]   / d) * k;
+      vel[j+1] += (P[j+1] / d) * k;
+      vel[j+2] += (P[j+2] / d) * k;
+    }
+    const damp = Math.pow(.86, dt * 60);
+    vel[j] *= damp; vel[j+1] *= damp; vel[j+2] *= damp;
+
+    const pull = .09;                                         // regreso elástico a la forma
+    P[j]   += (tx - P[j])   * pull + vel[j]   * dt * 60 * .016;
+    P[j+1] += (ty - P[j+1]) * pull + vel[j+1] * dt * 60 * .016;
+    P[j+2] += (tz - P[j+2]) * pull + vel[j+2] * dt * 60 * .016;
+  }
+  geo.attributes.position.needsUpdate = true;
+
+  // el brillo delata la energía acumulada
+  points.material.size = .045 + S.charge * .05 + S.blast * .02;
+  points.material.opacity = .82 + S.charge * .18;
+
+  /* --- lectura en pantalla --- */
+  frames++;
+  if (now - fpsT > 400) { fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now; }
+  $('r-hands').textContent   = S.hands;
+  $('r-fingers').textContent = S.hands ? S.fingers : '—';
+  $('r-gesture').textContent = S.gesture;
+  $('r-charge').textContent  = Math.round(S.charge * 100) + ' %';
+  $('r-fps').textContent     = fps;
+
+  renderer.render(scene, camera);
+}
+
+/* ══════════ 7. CONTROLES Y AJUSTE DE TAMAÑO ══════════ */
+$('shapes').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (b) setShape(+b.dataset.shape);
+});
+addEventListener('keydown', e => {
+  if (e.key >= '1' && e.key <= '4') setShape(+e.key - 1);
+});
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  const dpr = Math.min(devicePixelRatio, 2);
+  sk.width = w * dpr; sk.height = h * dpr;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  sk.width = w * dpr; sk.height = h * dpr;
+}
+addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
