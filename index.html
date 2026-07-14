@@ -3,80 +3,115 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Señala y pregunta</title>
+<title>JARVIS · asistente visual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{--ink:#080A12;--line:rgba(232,230,223,.18);--paper:#E8E6DF;
-    --dim:rgba(232,230,223,.55);--faint:rgba(232,230,223,.32);
-    --signal:#57E0D6;--hot:#F2A65A}
+  :root{
+    --ink:#03070E; --cyan:#4DE1F2; --cyan-dim:rgba(77,225,242,.32);
+    --amber:#FFB347; --red:#FF5C6E; --paper:#DCEBF0;
+    --dim:rgba(220,235,240,.55); --faint:rgba(220,235,240,.28);
+  }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;background:var(--ink);color:var(--paper);
     font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;overflow:hidden;
     -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   #stage{position:fixed;inset:0}
-  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
   #hud{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+  /* atmósfera: viñeta + líneas de barrido */
   #shade{position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(115% 85% at 50% 45%,transparent 40%,rgba(8,10,18,.6) 100%),
-      linear-gradient(180deg,rgba(8,10,18,.6) 0%,transparent 20%,transparent 55%,rgba(8,10,18,.86) 100%)}
+    background:radial-gradient(120% 85% at 50% 45%,transparent 42%,rgba(3,7,14,.72) 100%),
+      linear-gradient(180deg,rgba(3,7,14,.72) 0%,transparent 18%,transparent 52%,rgba(3,7,14,.9) 100%)}
+  #scan{position:absolute;inset:0;pointer-events:none;opacity:.35;mix-blend-mode:overlay;
+    background:repeating-linear-gradient(0deg,rgba(77,225,242,.09) 0 1px,transparent 1px 3px)}
 
-  header{position:absolute;top:20px;left:22px;pointer-events:none}
-  .eyebrow{font-size:9px;letter-spacing:.32em;text-transform:uppercase;color:var(--signal);margin:0 0 8px}
-  h1{font-family:"Bodoni Moda",Didot,serif;font-style:italic;font-weight:400;
-    font-size:clamp(22px,3vw,34px);line-height:1;margin:0}
-  .hint{margin:10px 0 0;font-size:10.5px;line-height:1.7;color:var(--dim);max-width:230px}
-  .hint b{color:var(--paper);font-weight:500}
+  /* corchetes de encuadre: la firma del HUD */
+  .bracket{position:absolute;width:34px;height:34px;pointer-events:none;
+    border:2px solid var(--cyan);opacity:.55}
+  .tl{top:14px;left:14px;border-right:0;border-bottom:0}
+  .tr{top:14px;right:14px;border-left:0;border-bottom:0}
+  .bl{bottom:14px;left:14px;border-right:0;border-top:0}
+  .br{bottom:14px;right:14px;border-left:0;border-top:0}
 
-  .tools{position:absolute;top:20px;right:20px;display:flex;gap:6px}
-  .tools button{appearance:none;cursor:pointer;font:inherit;font-size:9.5px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--dim);padding:9px 12px;border:1px solid var(--line);
-    background:rgba(15,19,32,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-  .tools button.on{color:var(--ink);background:var(--signal);border-color:var(--signal)}
+  /* barra de estado */
+  #bar{position:absolute;top:22px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;padding:8px 16px;
+    background:rgba(3,10,20,.72);border:1px solid var(--cyan-dim);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  #pulse{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+  #pulse.live{background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:beat 1.5s ease-in-out infinite}
+  #pulse.think{background:var(--amber);box-shadow:0 0 10px var(--amber);animation:beat .5s linear infinite}
+  #pulse.talk{background:var(--red);box-shadow:0 0 10px var(--red)}
+  @keyframes beat{0%,100%{opacity:1}50%{opacity:.25}}
+  #state{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:12px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--cyan)}
+  #count{font-size:9.5px;color:var(--faint);letter-spacing:.1em;border-left:1px solid var(--cyan-dim);padding-left:10px}
 
-  /* tarjeta de resultado */
-  #card{position:absolute;left:50%;bottom:26px;transform:translate(-50%,14px);
-    width:min(560px,calc(100% - 36px));padding:18px 20px;
-    background:rgba(15,19,32,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    border:1px solid var(--line);border-left:2px solid var(--signal);
-    opacity:0;transition:opacity .3s,transform .3s}
+  /* transcripción */
+  #heard{position:absolute;top:64px;left:50%;transform:translateX(-50%);
+    max-width:min(560px,88vw);padding:7px 14px;text-align:center;
+    font-size:11.5px;color:var(--dim);background:rgba(3,10,20,.6);
+    border-left:2px solid var(--amber);opacity:0;transition:opacity .25s}
+  #heard.show{opacity:1}
+
+  /* respuesta */
+  #card{position:absolute;left:50%;bottom:86px;transform:translate(-50%,12px);
+    width:min(600px,calc(100% - 32px));padding:16px 18px;
+    background:rgba(3,12,22,.86);border:1px solid var(--cyan-dim);border-left:2px solid var(--cyan);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    opacity:0;transition:opacity .28s,transform .28s}
   #card.show{opacity:1;transform:translate(-50%,0)}
-  #card .tag{font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--signal);margin:0 0 8px}
-  #card h2{font-family:"Bodoni Moda",Didot,serif;font-style:italic;font-weight:400;
-    font-size:26px;line-height:1.05;margin:0 0 10px}
-  #card p{margin:0;font-size:12.5px;line-height:1.7;color:var(--dim)}
-  #card.err{border-left-color:var(--hot)}
-  #card.err .tag{color:var(--hot)}
-  .dots::after{content:'';animation:d 1.2s steps(4,end) infinite}
-  @keyframes d{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+  #card.err{border-left-color:var(--red);border-color:rgba(255,92,110,.35)}
+  #c-q{margin:0 0 8px;font-size:9px;letter-spacing:.26em;text-transform:uppercase;color:var(--faint)}
+  #c-a{margin:0;font-family:"Rajdhani",sans-serif;font-weight:500;
+    font-size:20px;line-height:1.35;color:var(--paper)}
+  #card.err #c-a{color:var(--red);font-size:14px}
 
-  /* pantalla de inicio */
+  /* controles */
+  .tools{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:2px;
+    background:rgba(3,10,20,.72);border:1px solid var(--cyan-dim);padding:3px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .tools button{appearance:none;cursor:pointer;font:inherit;font-size:9.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--dim);padding:11px 14px;border:0;background:transparent;
+    transition:color .15s,background .15s}
+  .tools button:hover{color:var(--paper)}
+  .tools button.on{color:var(--ink);background:var(--cyan)}
+
+  /* arranque */
   #boot{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:var(--ink);padding:24px}
-  #boot .card{max-width:440px;width:100%;text-align:center}
-  #boot p.txt{font-size:12px;line-height:1.85;color:var(--dim);margin:16px 0 20px}
-  #key{width:100%;padding:13px 14px;background:#0F1320;border:1px solid var(--line);
-    color:var(--paper);font:inherit;font-size:12px;margin-bottom:10px;text-align:center}
-  #key:focus{outline:none;border-color:var(--signal)}
-  #model{width:100%;padding:12px;background:#0F1320;border:1px solid var(--line);
-    color:var(--dim);font:inherit;font-size:11px;margin-bottom:18px}
-  #go{width:100%;appearance:none;cursor:pointer;font:inherit;font-size:11px;letter-spacing:.2em;
-    text-transform:uppercase;font-weight:600;padding:15px;border:1px solid var(--signal);
-    background:transparent;color:var(--signal);transition:background .18s,color .18s}
-  #go:hover{background:var(--signal);color:var(--ink)}
-  .note{font-size:10px;line-height:1.7;color:var(--faint);margin-top:16px}
-  .status{color:var(--signal);font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;margin-top:16px;min-height:14px}
-  .err{color:var(--hot)!important}
+  #boot .card{max-width:430px;width:100%;text-align:center}
+  #boot h1{font-family:"Rajdhani",sans-serif;font-weight:300;font-size:46px;letter-spacing:.34em;
+    margin:0 0 4px;color:var(--cyan);text-indent:.34em}
+  #boot .sub{font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);margin:0 0 26px}
+  #boot p.txt{font-size:11.5px;line-height:1.9;color:var(--dim);margin:0 0 20px;text-align:left}
+  #boot p.txt b{color:var(--cyan);font-weight:500}
+  #key,#model{width:100%;padding:13px;background:#071322;border:1px solid var(--cyan-dim);
+    color:var(--paper);font:inherit;font-size:11.5px;margin-bottom:9px}
+  #key{text-align:center}
+  #key:focus,#model:focus{outline:none;border-color:var(--cyan)}
+  #go{width:100%;margin-top:8px;appearance:none;cursor:pointer;font-family:"Rajdhani",sans-serif;
+    font-weight:700;font-size:14px;letter-spacing:.26em;text-transform:uppercase;padding:16px;
+    border:1px solid var(--cyan);background:transparent;color:var(--cyan);transition:.18s}
+  #go:hover{background:var(--cyan);color:var(--ink);box-shadow:0 0 24px rgba(77,225,242,.4)}
+  .note{font-size:9.5px;line-height:1.7;color:var(--faint);margin-top:16px}
+  .status{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--cyan);margin-top:14px;min-height:13px}
+  .err{color:var(--red)!important}
   #boot.hidden{display:none}
 
   @media (max-width:600px){
-    header{top:14px;left:14px}
-    .hint{font-size:9.5px;max-width:150px}
-    .tools{top:14px;right:12px}
-    #card{bottom:16px;padding:15px 16px}
-    #card h2{font-size:21px}
-    #card p{font-size:11.5px}
+    #bar{top:16px;padding:7px 12px;gap:8px}
+    #state{font-size:10px;letter-spacing:.16em}
+    #heard{top:54px;font-size:10.5px}
+    #card{bottom:74px;padding:13px 15px}
+    #c-a{font-size:16px}
+    .tools button{padding:11px 10px;font-size:9px;letter-spacing:.08em}
+    .bracket{width:22px;height:22px}
+    #boot h1{font-size:32px}
   }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 </head>
 <body>
@@ -84,33 +119,43 @@
   <video id="cam" playsinline muted autoplay></video>
   <canvas id="hud"></canvas>
   <div id="shade"></div>
+  <div id="scan"></div>
+  <div class="bracket tl"></div><div class="bracket tr"></div>
+  <div class="bracket bl"></div><div class="bracket br"></div>
 
-  <header>
-    <p class="eyebrow">Visión asistida</p>
-    <h1>Señala y<br>pregunta</h1>
-    <p class="hint"><b>Apunta con el índice</b> a un objeto y mantén.<br><b>Puño</b> — callar la voz.</p>
-  </header>
-
-  <div class="tools">
-    <button id="tvoice" class="on">Voz</button>
-    <button id="tshot">Analizar</button>
+  <div id="bar">
+    <span id="pulse"></span>
+    <span id="state">En espera</span>
+    <span id="count">0 consultas</span>
   </div>
 
+  <div id="heard"></div>
+
   <div id="card">
-    <p class="tag" id="c-tag">Objeto</p>
-    <h2 id="c-title">—</h2>
-    <p id="c-body"></p>
+    <p id="c-q">—</p>
+    <p id="c-a"></p>
+  </div>
+
+  <div class="tools">
+    <button id="t-mic" class="on">Micro</button>
+    <button id="t-voice" class="on">Voz</button>
+    <button id="t-flip">Cámara</button>
+    <button id="t-shot">Analizar</button>
   </div>
 
   <div id="boot">
     <div class="card">
-      <p class="eyebrow">Visión asistida</p>
-      <h1>Señala y<br>pregunta</h1>
-      <p class="txt">Apunta con el dedo a cualquier objeto: una taza, un zapato, una planta. La página lo recorta, se lo manda a Groq y te lo cuenta en voz alta.</p>
-      <input id="key" type="password" placeholder="Pega tu API key de Groq (gsk_…)" autocomplete="off" />
-      <select id="model"><option value="">Modelo — se cargará con tu key</option></select>
-      <button id="go">Activar cámara y voz</button>
-      <p class="note">La clave se guarda solo en este dispositivo. El botón también desbloquea el altavoz: los navegadores no dejan hablar a una página sin que la toques primero.</p>
+      <h1>JARVIS</h1>
+      <p class="sub">Asistente visual · Groq</p>
+      <p class="txt">
+        Di <b>«Jarvis»</b> y luego tu pregunta: <i>Jarvis, ¿qué hay encima de la mesa?</i><br>
+        O <b>apunta con el índice</b> a un objeto y mantén el dedo quieto.<br>
+        Solo se consulta a la API cuando dices la palabra clave. Nada más gasta créditos.
+      </p>
+      <input id="key" type="password" placeholder="API key de Groq (gsk_…)" autocomplete="off" />
+      <select id="model"><option value="">Modelo — se carga con tu key</option></select>
+      <button id="go">Iniciar sistema</button>
+      <p class="note">Se pedirán cámara y micrófono a la vez. Este toque también desbloquea el altavoz. La clave se guarda solo en este dispositivo.</p>
       <p class="status" id="status"></p>
     </div>
   </div>
@@ -121,33 +166,29 @@ import { HandLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@m
 
 const $ = id => document.getElementById(id);
 const video = $('cam'), hud = $('hud'), ctx = hud.getContext('2d');
-const card = $('card'), statusEl = $('status');
 const LS = { key: 'groq_key', model: 'groq_model' };
 
-/* ═══ voz del navegador ═══
-   Puede no existir: navegadores embebidos (Instagram, TikTok, vistas previas)
-   y algunos WebView de Android no la exponen. Detectamos y seguimos sin voz. */
-const SS = (typeof window !== 'undefined' && 'speechSynthesis' in window && window.SpeechSynthesisUtterance)
-  ? window.speechSynthesis : null;
+let KEY = '', MODEL = '', landmarker = null;
+let mirrored = false, facing = 'environment';
+let busy = false, cooldown = 0, queries = 0;
+let micOn = true, speaking = false;
 
+/* ══ estado del HUD ══ */
+function setState(s, cls) {
+  $('state').textContent = s;
+  $('pulse').className = cls || '';
+}
+
+/* ══ SALIDA DE VOZ ══ */
+const SS = ('speechSynthesis' in window && window.SpeechSynthesisUtterance) ? speechSynthesis : null;
 const TTS = {
-  on: !!SS, supported: !!SS, voice: null,
-  pick() {
-    if (!SS) return;
-    const vs = SS.getVoices() || [];
-    this.voice = vs.find(v => /^es-(MX|419|US)/i.test(v.lang))
-              || vs.find(v => /^es/i.test(v.lang)) || vs[0] || null;
-  },
-  unlock() {                       // debe llamarse dentro de un clic real
-    if (!SS) return;
-    try {
-      this.pick();
-      const u = new SpeechSynthesisUtterance('Listo');
-      if (this.voice) u.voice = this.voice;
-      u.lang = this.voice?.lang || 'es-ES'; u.volume = .9;
-      SS.speak(u);
-    } catch (e) { console.warn('Voz no disponible:', e); }
-  },
+  on: !!SS, ok: !!SS, voice: null,
+  pick() { if (!SS) return; const v = SS.getVoices() || [];
+    this.voice = v.find(x => /^es-(MX|419|US)/i.test(x.lang)) || v.find(x => /^es/i.test(x.lang)) || v[0] || null; },
+  unlock() { if (!SS) return; try { this.pick();
+    const u = new SpeechSynthesisUtterance('Sistema en línea');
+    if (this.voice) u.voice = this.voice; u.lang = this.voice?.lang || 'es-ES';
+    SS.speak(u); } catch (e) {} },
   say(t) {
     if (!SS || !this.on || !t) return;
     try {
@@ -155,167 +196,228 @@ const TTS = {
       const u = new SpeechSynthesisUtterance(t);
       if (!this.voice) this.pick();
       if (this.voice) u.voice = this.voice;
-      u.lang = this.voice?.lang || 'es-ES'; u.rate = 1.02; u.pitch = 1;
+      u.lang = this.voice?.lang || 'es-ES'; u.rate = 1.05;
+      // el micro se apaga mientras habla, o se oiría a sí mismo
+      u.onstart = () => { speaking = true; ASR.pause(); setState('Respondiendo', 'talk'); };
+      u.onend   = () => { speaking = false; ASR.resume(); idle(); };
       SS.speak(u);
-    } catch (e) { console.warn('Voz no disponible:', e); }
+    } catch (e) { speaking = false; ASR.resume(); }
   },
-  hush() { if (SS) { try { SS.cancel(); } catch (e) {} } }
+  hush() { if (SS) { try { SS.cancel(); } catch (e) {} } speaking = false; ASR.resume(); }
 };
-if (SS && SS.addEventListener) SS.addEventListener('voiceschanged', () => TTS.pick());
-if (!SS) {                          // sin voz: se avisa y el resto sigue funcionando
-  const b = $('tvoice');
-  b.classList.remove('on'); b.textContent = 'Sin voz'; b.disabled = true;
-  b.title = 'Este navegador no permite síntesis de voz. Ábrela en Chrome o Safari.';
+if (SS?.addEventListener) SS.addEventListener('voiceschanged', () => TTS.pick());
+
+/* ══ ENTRADA DE VOZ ══ */
+const SRC = window.SpeechRecognition || window.webkitSpeechRecognition;
+const WAKE = /\b(jarvis|yarvis|harvis|charbis|charvis|jarbis)\b/i;
+
+const ASR = {
+  rec: null, want: false, ok: !!SRC,
+  start() {
+    if (!SRC) return;
+    this.want = true;
+    if (this.rec) return;
+    const r = new SRC();
+    r.lang = 'es-ES'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+    r.onresult = e => {
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else interim += t;
+      }
+      const live = (final || interim).trim();
+      if (live) { $('heard').textContent = '« ' + live + ' »'; $('heard').classList.add('show'); }
+      if (final && !speaking) handleSpeech(final.trim());
+    };
+    r.onend = () => {                       // se corta sola: hay que reanimarla
+      this.rec = null;
+      if (this.want && !speaking) setTimeout(() => this.start(), 250);
+    };
+    r.onerror = ev => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        this.want = false; this.ok = false;
+        $('t-mic').classList.remove('on'); $('t-mic').textContent = 'Sin micro';
+      }
+    };
+    try { r.start(); this.rec = r; } catch (e) { this.rec = null; }
+  },
+  pause() { this.want = false; try { this.rec?.abort(); } catch (e) {} this.rec = null; },
+  resume() { if (micOn && this.ok) this.start(); },
+  stop() { micOn = false; this.pause(); }
+};
+
+function handleSpeech(text) {
+  if (!WAKE.test(text)) return;                        // sin palabra clave, no se gasta nada
+  const q = text.replace(WAKE, '').replace(/^[\s,.:;¿?¡!-]+/, '').trim();
+  $('heard').textContent = '« ' + text + ' »';
+  ask(null, q || '¿Qué ves en la escena?');
 }
 
-/* ═══ lista de modelos de Groq ═══ */
-const VISION = /scout|maverick|qwen3\.?6|vision|llava|omni|4o/i;
+/* ══ MODELOS DE GROQ ══ */
+const VIS = /scout|maverick|qwen3\.?6|vision|llava|omni/i;
 async function loadModels(key) {
   const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: 'Bearer ' + key } });
-  if (!r.ok) throw new Error('La key no es válida (' + r.status + ')');
+  if (!r.ok) throw new Error('Key inválida (' + r.status + ')');
   const ids = (await r.json()).data.map(m => m.id).sort();
   const sel = $('model'); sel.innerHTML = '';
-  const saved = localStorage.getItem(LS.model);
-  const likely = ids.filter(i => VISION.test(i));
   for (const id of ids) {
     const o = document.createElement('option');
-    o.value = id; o.textContent = id + (VISION.test(id) ? '  · visión' : '');
+    o.value = id; o.textContent = id + (VIS.test(id) ? '  · visión' : '');
     sel.appendChild(o);
   }
-  sel.value = (saved && ids.includes(saved)) ? saved : (likely[0] || ids[0]);
+  const saved = localStorage.getItem(LS.model);
+  sel.value = (saved && ids.includes(saved)) ? saved : (ids.find(i => VIS.test(i)) || ids[0]);
   return sel.value;
 }
+$('key').value = localStorage.getItem(LS.key) || '';
 $('key').addEventListener('change', async e => {
   const k = e.target.value.trim(); if (k.length < 20) return;
-  statusEl.classList.remove('err'); statusEl.textContent = 'Comprobando la key…';
-  try { await loadModels(k); statusEl.textContent = 'Key válida · modelo listo'; }
-  catch (err) { statusEl.classList.add('err'); statusEl.textContent = err.message; }
+  $('status').classList.remove('err'); $('status').textContent = 'Verificando…';
+  try { await loadModels(k); $('status').textContent = 'Key válida'; }
+  catch (err) { $('status').classList.add('err'); $('status').textContent = err.message; }
 });
-$('key').value = localStorage.getItem(LS.key) || '';
 if ($('key').value) $('key').dispatchEvent(new Event('change'));
 
-/* ═══ arranque ═══ */
-let landmarker = null, KEY = '', MODEL = '';
+/* ══ CÁMARA (con el espejo bien puesto) ══ */
+async function openCamera(mode) {
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+  const s = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false
+  });
+  video.srcObject = s;
+  await video.play();
+  // el navegador manda: preguntamos qué cámara nos dio de verdad
+  const real = s.getVideoTracks()[0]?.getSettings()?.facingMode;
+  facing = real || mode;
+  mirrored = (facing === 'user');                     // solo la frontal se refleja
+  video.style.transform = mirrored ? 'scaleX(-1)' : 'none';
+}
+
+/* ══ ARRANQUE ══ */
 $('go').addEventListener('click', async () => {
   KEY = $('key').value.trim();
-  if (KEY.length < 20) { statusEl.classList.add('err'); statusEl.textContent = 'Falta la API key'; return; }
-  TTS.unlock();                                     // ← el altavoz se desbloquea aquí
+  if (KEY.length < 20) { $('status').classList.add('err'); $('status').textContent = 'Falta la API key'; return; }
+  TTS.unlock();                                       // el altavoz se desbloquea con este toque
   try {
-    statusEl.classList.remove('err'); statusEl.textContent = 'Pidiendo cámara…';
-    video.srcObject = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }, audio: false
-    }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }));
-    await video.play();
+    $('status').classList.remove('err'); $('status').textContent = 'Solicitando micrófono…';
+    try {                                             // permiso de micro: se pide una vez y queda
+      const m = await navigator.mediaDevices.getUserMedia({ audio: true });
+      m.getTracks().forEach(t => t.stop());           // lo soltamos: lo usará el reconocedor
+    } catch (e) { micOn = false; $('t-mic').classList.remove('on'); $('t-mic').textContent = 'Sin micro'; }
 
-    if (!$('model').value) { statusEl.textContent = 'Cargando modelos…'; await loadModels(KEY); }
+    $('status').textContent = 'Solicitando cámara…';
+    await openCamera('environment');
+
+    if (!$('model').value) await loadModels(KEY);
     MODEL = $('model').value;
     localStorage.setItem(LS.key, KEY); localStorage.setItem(LS.model, MODEL);
 
-    statusEl.textContent = 'Cargando rastreo de manos…';
+    $('status').textContent = 'Cargando rastreo de manos…';
     const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
     landmarker = await HandLandmarker.createFromOptions(files, {
       baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate: 'GPU' },
       runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: .5, minTrackingConfidence: .5
     });
+
     $('boot').classList.add('hidden');
     resize(); loop();
-    TTS.say('Cámara lista. Apunta con el dedo a un objeto.');
+    if (micOn) ASR.start();
+    idle();
+    TTS.say('Sistema en línea. Di Jarvis y tu pregunta.');
   } catch (e) {
-    statusEl.classList.add('err');
-    statusEl.textContent = (e.name || 'Error') + ' — ' + (e.message || e);
+    $('status').classList.add('err');
+    $('status').textContent = (e.name || 'Error') + ' — ' + (e.message || e);
   }
 });
-
-/* ═══ lectura de la mano ═══ */
-const TIP = [4,8,12,16,20], PIP = [3,6,10,14,18];
-const d3 = (a,b) => Math.hypot(a.x-b.x, a.y-b.y, a.z-b.z);
-function readHand(w) {
-  const up = f => d3(w[TIP[f]], w[0]) > d3(w[PIP[f]], w[0]) * 1.06;
-  const idx = up(1), mid = up(2), ring = up(3), pink = up(4);
-  return {
-    pointing: idx && !mid && !ring && !pink,
-    fist: !idx && !mid && !ring && !pink
-  };
-}
-/* el objeto está MÁS ALLÁ de la yema: prolongamos la línea nudillo→punta */
-function aim(lm) {
-  const a = lm[6], b = lm[8], K = 1.7;
-  return {
-    x: Math.min(.97, Math.max(.03, b.x + (b.x - a.x) * K)),
-    y: Math.min(.97, Math.max(.03, b.y + (b.y - a.y) * K))
-  };
-}
-
-/* ═══ captura y consulta ═══ */
-const buf = document.createElement('canvas'), bctx = buf.getContext('2d');
-let busy = false, cooldown = 0;
-
-function crop(t) {                                    // recorte cuadrado alrededor del punto señalado
-  const vw = video.videoWidth, vh = video.videoHeight;
-  const side = Math.round(Math.min(vw, vh) * .48);
-  let cx = Math.round(t.x * vw), cy = Math.round(t.y * vh);
-  cx = Math.min(vw - side/2, Math.max(side/2, cx));
-  cy = Math.min(vh - side/2, Math.max(side/2, cy));
-  buf.width = buf.height = 512;
-  bctx.drawImage(video, cx - side/2, cy - side/2, side, side, 0, 0, 512, 512);
-  return buf.toDataURL('image/jpeg', .85);
-}
-
-const PROMPT = `Eres un guía visual. En la imagen hay un objeto señalado con el dedo, situado en el centro del encuadre.
-Identifícalo e ignora el fondo y la mano.
-Responde SOLO con un objeto JSON, sin markdown:
-{"objeto":"nombre corto en español","desc":"dos frases: qué es y un dato útil o curioso. Máximo 45 palabras."}
-Si no distingues nada claro, usa {"objeto":"No lo veo claro","desc":"Acércate más o mejora la luz."}`;
-
-async function ask(t) {
+function idle() {
   if (busy) return;
-  busy = true;
-  show('Analizando', '…', 'Leyendo la escena', false, true);
+  setState(micOn && ASR.ok ? 'Escuchando' : 'Listo', micOn && ASR.ok ? 'live' : '');
+}
+
+/* ══ CAPTURA Y CONSULTA ══ */
+const buf = document.createElement('canvas'), bctx = buf.getContext('2d');
+function grab(target) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (target) {                                       // recorte alrededor de lo señalado
+    const side = Math.round(Math.min(vw, vh) * .5);
+    let cx = Math.min(vw - side/2, Math.max(side/2, target.x * vw));
+    let cy = Math.min(vh - side/2, Math.max(side/2, target.y * vh));
+    buf.width = buf.height = 448;
+    bctx.drawImage(video, cx - side/2, cy - side/2, side, side, 0, 0, 448, 448);
+  } else {                                            // escena completa
+    const w = 640, h = Math.round(640 * vh / vw);
+    buf.width = w; buf.height = h;
+    bctx.drawImage(video, 0, 0, w, h);
+  }
+  return buf.toDataURL('image/jpeg', .72);            // calidad justa: menos bytes, menos coste
+}
+
+const SYS = `Eres JARVIS, un asistente visual. Miras por una cámara.
+Responde SIEMPRE en español, en MÁXIMO 2 frases y 30 palabras. Directo, sin preámbulos, sin repetir la pregunta.
+Si no distingues algo, dilo en una frase.`;
+
+async function ask(target, question) {
+  if (busy || !KEY) return;
+  busy = true; cooldown = 1.6;
+  setState('Analizando', 'think');
+  $('c-q').textContent = question;
+  $('c-a').textContent = '…';
+  $('card').classList.remove('err'); $('card').classList.add('show');
   try {
-    const img = crop(t);
+    const img = grab(target);
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + KEY },
       body: JSON.stringify({
-        model: MODEL, temperature: .3, max_tokens: 220,
-        messages: [{ role: 'user', content: [
-          { type: 'text', text: PROMPT },
-          { type: 'image_url', image_url: { url: img } }
-        ]}]
+        model: MODEL, temperature: .25, max_tokens: 90,      // techo bajo: cuida los créditos
+        messages: [
+          { role: 'system', content: SYS },
+          { role: 'user', content: [
+            { type: 'text', text: question },
+            { type: 'image_url', image_url: { url: img } }
+          ]}
+        ]
       })
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error?.message || ('HTTP ' + r.status));
-    const txt = j.choices?.[0]?.message?.content || '';
-    const m = txt.match(/\{[\s\S]*\}/);
-    const o = m ? JSON.parse(m[0]) : { objeto: 'Respuesta', desc: txt.slice(0, 200) };
-    show('Objeto', o.objeto, o.desc, false);
-    TTS.say(`${o.objeto}. ${o.desc}`);
+    const a = (j.choices?.[0]?.message?.content || '').trim() || 'Sin respuesta.';
+    $('c-a').textContent = a;
+    $('count').textContent = (++queries) + (queries === 1 ? ' consulta' : ' consultas');
+    TTS.say(a);
+    if (!TTS.on || !SS) idle();
   } catch (e) {
-    show('Error', 'No se pudo analizar', e.message, true);
+    $('card').classList.add('err');
+    $('c-a').textContent = e.message;
+    idle();
   } finally {
-    busy = false; cooldown = 2.2;
+    busy = false;
   }
 }
-function show(tag, title, body, isErr, pending) {
-  $('c-tag').textContent = tag;
-  $('c-title').textContent = title;
-  $('c-body').textContent = body;
-  $('c-body').className = pending ? 'dots' : '';
-  card.classList.toggle('err', !!isErr);
-  card.classList.add('show');
+
+/* ══ MANO ══ */
+const TIP = [4,8,12,16,20], PIP = [3,6,10,14,18];
+const d3 = (a,b) => Math.hypot(a.x-b.x, a.y-b.y, a.z-b.z);
+function gest(w) {
+  const up = f => d3(w[TIP[f]], w[0]) > d3(w[PIP[f]], w[0]) * 1.06;
+  const i = up(1), m = up(2), r = up(3), p = up(4);
+  return { point: i && !m && !r && !p, fist: !i && !m && !r && !p };
+}
+function aim(lm) {                                     // el objeto está más allá de la yema
+  const a = lm[6], b = lm[8], K = 1.7;
+  return { x: Math.min(.97, Math.max(.03, b.x + (b.x - a.x) * K)),
+           y: Math.min(.97, Math.max(.03, b.y + (b.y - a.y) * K)) };
 }
 
-/* ═══ bucle ═══ */
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
                [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-let hold = 0, last = performance.now(), lastVT = -1;
-const HOLD = .85;                                   // segundos apuntando para disparar
+let hold = 0, last = performance.now(), lastVT = -1, spin = 0;
+const HOLD = .8;
 
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now(), dt = Math.min((now - last) / 1000, .05); last = now;
-  cooldown = Math.max(0, cooldown - dt);
+  cooldown = Math.max(0, cooldown - dt); spin += dt;
 
   if (!landmarker || video.readyState < 2 || video.currentTime === lastVT) return;
   lastVT = video.currentTime;
@@ -324,52 +426,59 @@ function loop() {
   const lm = res.landmarks?.[0], w = res.worldLandmarks?.[0];
   const W = hud.width, H = hud.height;
   ctx.clearRect(0, 0, W, H);
-
   if (!lm) { hold = 0; return; }
 
-  // encaje con object-fit:cover + espejo
+  // encaje con object-fit:cover; el espejo solo si la cámara es frontal
   const vr = video.videoWidth / video.videoHeight, cr = W / H;
   const sx = vr > cr ? cr / vr : 1, sy = vr > cr ? 1 : vr / cr;
-  const X = p => (.5 + (.5 - p.x) / sx) * W, Y = p => (.5 + (p.y - .5) / sy) * H;
+  const X = p => (mirrored ? (.5 + (.5 - p.x) / sx) : (.5 + (p.x - .5) / sx)) * W;
+  const Y = p => (.5 + (p.y - .5) / sy) * H;
 
-  ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(87,224,214,.4)';
+  ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(77,225,242,.42)';
   ctx.beginPath();
   for (const [a,b] of BONES) { ctx.moveTo(X(lm[a]), Y(lm[a])); ctx.lineTo(X(lm[b]), Y(lm[b])); }
   ctx.stroke();
 
-  const g = readHand(w);
-  if (g.fist) { TTS.hush(); card.classList.remove('show'); hold = 0; return; }
+  const g = gest(w);
+  if (g.fist) { TTS.hush(); $('card').classList.remove('show'); $('heard').classList.remove('show'); hold = 0; idle(); return; }
 
-  if (g.pointing && !busy && cooldown === 0) {
+  if (g.point && !busy && cooldown === 0) {
     hold += dt;
-    const t = aim(lm);
-    const px = X(t), py = Y(t), R = 30;
-    // retícula con anillo de progreso
-    ctx.strokeStyle = 'rgba(232,230,223,.35)'; ctx.lineWidth = 1;
+    const t = aim(lm), px = X(t), py = Y(t), R = 32, prog = Math.min(1, hold / HOLD);
+
+    ctx.strokeStyle = 'rgba(77,225,242,.28)'; ctx.lineWidth = 1;   // anillos giratorios
+    ctx.beginPath(); ctx.arc(px, py, R + 10, spin, spin + 2.2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py, R + 10, spin + 3.14, spin + 5.34); ctx.stroke();
     ctx.beginPath(); ctx.arc(px, py, R, 0, 6.283); ctx.stroke();
-    ctx.strokeStyle = '#57E0D6'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(px, py, R, -1.571, -1.571 + 6.283 * Math.min(1, hold / HOLD)); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(px - 8, py); ctx.lineTo(px + 8, py);
-    ctx.moveTo(px, py - 8); ctx.lineTo(px, py + 8);
-    ctx.lineWidth = 1.5; ctx.stroke();
-    // línea desde la yema
-    ctx.strokeStyle = 'rgba(87,224,214,.25)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#4DE1F2'; ctx.lineWidth = 3;                 // progreso
+    ctx.beginPath(); ctx.arc(px, py, R, -1.571, -1.571 + 6.283 * prog); ctx.stroke();
+    ctx.lineWidth = 1.4;                                            // cruz
+    ctx.beginPath(); ctx.moveTo(px-9, py); ctx.lineTo(px+9, py);
+    ctx.moveTo(px, py-9); ctx.lineTo(px, py+9); ctx.stroke();
+    ctx.strokeStyle = 'rgba(77,225,242,.2)'; ctx.lineWidth = 1;     // haz desde el dedo
     ctx.beginPath(); ctx.moveTo(X(lm[8]), Y(lm[8])); ctx.lineTo(px, py); ctx.stroke();
 
-    if (hold >= HOLD) { hold = 0; ask(t); }
-  } else {
-    hold = 0;
-  }
+    if (hold >= HOLD) { hold = 0; ask(t, '¿Qué es este objeto? Nómbralo y añade un dato útil.'); }
+  } else hold = 0;
 }
 
-/* ═══ controles ═══ */
-$('tvoice').addEventListener('click', e => {
-  if (!TTS.supported) return;
-  TTS.on = !TTS.on; e.target.classList.toggle('on', TTS.on);
-  if (!TTS.on) TTS.hush(); else TTS.say('Voz activada');
+/* ══ CONTROLES ══ */
+$('t-mic').addEventListener('click', e => {
+  if (!ASR.ok) return;
+  micOn = !micOn;
+  e.target.classList.toggle('on', micOn);
+  micOn ? ASR.start() : ASR.pause();
+  idle();
 });
-$('tshot').addEventListener('click', () => { if (!busy) ask({ x: .5, y: .5 }); });
+$('t-voice').addEventListener('click', e => {
+  if (!TTS.ok) return;
+  TTS.on = !TTS.on; e.target.classList.toggle('on', TTS.on);
+  if (!TTS.on) TTS.hush();
+});
+$('t-flip').addEventListener('click', async () => {
+  await openCamera(facing === 'user' ? 'environment' : 'user');
+});
+$('t-shot').addEventListener('click', () => ask(null, '¿Qué ves? Descríbelo en una frase.'));
 
 function resize() { hud.width = innerWidth; hud.height = innerHeight; }
 addEventListener('resize', resize);
