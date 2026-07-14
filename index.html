@@ -3,484 +3,503 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>JARVIS · asistente visual</title>
+<title>Campo de partículas — instrumento de mano</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#03070E; --cyan:#4DE1F2; --cyan-dim:rgba(77,225,242,.32);
-    --amber:#FFB347; --red:#FF5C6E; --paper:#DCEBF0;
-    --dim:rgba(220,235,240,.55); --faint:rgba(220,235,240,.28);
+    --ink:#080A12; --line:rgba(232,230,223,.18); --paper:#E8E6DF;
+    --dim:rgba(232,230,223,.52); --faint:rgba(232,230,223,.30);
+    --signal:#57E0D6; --hot:#F2A65A;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;background:var(--ink);color:var(--paper);
     font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;overflow:hidden;
-    -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+    -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:none}
   #stage{position:fixed;inset:0}
-  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-  #hud{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    transform:scaleX(-1);filter:saturate(.5) contrast(1.05) brightness(.58)}
+  #skeleton,#gl{position:absolute;inset:0;width:100%;height:100%}
+  #gl{pointer-events:none}
+  #vignette{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 45%,transparent 35%,rgba(8,10,18,.74) 100%),
+      linear-gradient(180deg,rgba(8,10,18,.6) 0%,transparent 24%,transparent 68%,rgba(8,10,18,.7) 100%)}
+  #grid{position:absolute;inset:0;pointer-events:none;opacity:.18;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:64px 64px;
+    -webkit-mask-image:radial-gradient(70% 60% at 50% 50%,#000 0%,transparent 78%);
+    mask-image:radial-gradient(70% 60% at 50% 50%,#000 0%,transparent 78%)}
 
-  /* atmósfera: viñeta + líneas de barrido */
-  #shade{position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(120% 85% at 50% 45%,transparent 42%,rgba(3,7,14,.72) 100%),
-      linear-gradient(180deg,rgba(3,7,14,.72) 0%,transparent 18%,transparent 52%,rgba(3,7,14,.9) 100%)}
-  #scan{position:absolute;inset:0;pointer-events:none;opacity:.35;mix-blend-mode:overlay;
-    background:repeating-linear-gradient(0deg,rgba(77,225,242,.09) 0 1px,transparent 1px 3px)}
+  header{position:absolute;top:26px;left:30px;max-width:min(320px,44vw);pointer-events:none}
+  .eyebrow{font-size:9.5px;letter-spacing:.34em;text-transform:uppercase;color:var(--signal);margin:0 0 14px}
+  h1{font-family:"Bodoni Moda",Didot,serif;font-weight:400;font-style:italic;
+    font-size:clamp(24px,3.2vw,40px);line-height:.98;margin:0 0 14px}
+  .legend{margin:0;font-size:11px;line-height:1.85;color:var(--dim)}
+  .legend b{color:var(--paper);font-weight:500}
+  .legend em{color:var(--signal);font-style:normal}
 
-  /* corchetes de encuadre: la firma del HUD */
-  .bracket{position:absolute;width:34px;height:34px;pointer-events:none;
-    border:2px solid var(--cyan);opacity:.55}
-  .tl{top:14px;left:14px;border-right:0;border-bottom:0}
-  .tr{top:14px;right:14px;border-left:0;border-bottom:0}
-  .bl{bottom:14px;left:14px;border-right:0;border-top:0}
-  .br{bottom:14px;right:14px;border-left:0;border-top:0}
+  .readout{position:absolute;bottom:28px;left:30px;width:236px;padding:12px 15px;
+    background:rgba(15,19,32,.66);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+    border:1px solid var(--line);font-size:11px}
+  .row{display:flex;justify-content:space-between;align-items:baseline;padding:4.5px 0}
+  .row+.row{border-top:1px dotted rgba(232,230,223,.13)}
+  .k{color:var(--faint);letter-spacing:.16em;text-transform:uppercase;font-size:9.5px}
+  .v{font-weight:600}.v.sig{color:var(--signal)}.v.hot{color:var(--hot)}
+  #bar{height:2px;background:rgba(232,230,223,.12);margin-top:9px}
+  #bar i{display:block;height:100%;width:0%;background:var(--hot);transition:width .08s linear}
 
-  /* barra de estado */
-  #bar{position:absolute;top:22px;left:50%;transform:translateX(-50%);
-    display:flex;align-items:center;gap:10px;padding:8px 16px;
-    background:rgba(3,10,20,.72);border:1px solid var(--cyan-dim);
-    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-  #pulse{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
-  #pulse.live{background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:beat 1.5s ease-in-out infinite}
-  #pulse.think{background:var(--amber);box-shadow:0 0 10px var(--amber);animation:beat .5s linear infinite}
-  #pulse.talk{background:var(--red);box-shadow:0 0 10px var(--red)}
-  @keyframes beat{0%,100%{opacity:1}50%{opacity:.25}}
-  #state{font-family:"Rajdhani",sans-serif;font-weight:700;font-size:12px;
-    letter-spacing:.22em;text-transform:uppercase;color:var(--cyan)}
-  #count{font-size:9.5px;color:var(--faint);letter-spacing:.1em;border-left:1px solid var(--cyan-dim);padding-left:10px}
+  .shapes{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);
+    display:flex;gap:2px;padding:4px;background:rgba(15,19,32,.68);
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);border:1px solid var(--line)}
+  .shapes button{appearance:none;border:0;cursor:pointer;background:transparent;color:var(--dim);
+    font:inherit;font-size:10px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;
+    padding:9px 13px;display:flex;gap:7px;align-items:center;transition:color .18s,background .18s}
+  .shapes button i{font-style:normal;font-size:9px;width:15px;height:15px;display:grid;place-items:center;
+    border:1px solid var(--line);color:var(--faint);transition:all .18s}
+  .shapes button:hover{color:var(--paper)}
+  .shapes button[aria-pressed="true"]{color:var(--ink);background:var(--signal)}
+  .shapes button[aria-pressed="true"] i{border-color:var(--ink);color:var(--ink)}
+  .shapes button:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
 
-  /* transcripción */
-  #heard{position:absolute;top:64px;left:50%;transform:translateX(-50%);
-    max-width:min(560px,88vw);padding:7px 14px;text-align:center;
-    font-size:11.5px;color:var(--dim);background:rgba(3,10,20,.6);
-    border-left:2px solid var(--amber);opacity:0;transition:opacity .25s}
-  #heard.show{opacity:1}
+  #quality{position:absolute;top:26px;right:26px;appearance:none;cursor:pointer;font:inherit;
+    font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);
+    padding:9px 14px;border:1px solid var(--line);background:rgba(15,19,32,.66);
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+  #quality:hover{color:var(--paper)}
 
-  /* respuesta */
-  #card{position:absolute;left:50%;bottom:86px;transform:translate(-50%,12px);
-    width:min(600px,calc(100% - 32px));padding:16px 18px;
-    background:rgba(3,12,22,.86);border:1px solid var(--cyan-dim);border-left:2px solid var(--cyan);
-    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    opacity:0;transition:opacity .28s,transform .28s}
-  #card.show{opacity:1;transform:translate(-50%,0)}
-  #card.err{border-left-color:var(--red);border-color:rgba(255,92,110,.35)}
-  #c-q{margin:0 0 8px;font-size:9px;letter-spacing:.26em;text-transform:uppercase;color:var(--faint)}
-  #c-a{margin:0;font-family:"Rajdhani",sans-serif;font-weight:500;
-    font-size:20px;line-height:1.35;color:var(--paper)}
-  #card.err #c-a{color:var(--red);font-size:14px}
-
-  /* controles */
-  .tools{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:2px;
-    background:rgba(3,10,20,.72);border:1px solid var(--cyan-dim);padding:3px;
-    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-  .tools button{appearance:none;cursor:pointer;font:inherit;font-size:9.5px;letter-spacing:.16em;
-    text-transform:uppercase;color:var(--dim);padding:11px 14px;border:0;background:transparent;
-    transition:color .15s,background .15s}
-  .tools button:hover{color:var(--paper)}
-  .tools button.on{color:var(--ink);background:var(--cyan)}
-
-  /* arranque */
-  #boot{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:var(--ink);padding:24px}
-  #boot .card{max-width:430px;width:100%;text-align:center}
-  #boot h1{font-family:"Rajdhani",sans-serif;font-weight:300;font-size:46px;letter-spacing:.34em;
-    margin:0 0 4px;color:var(--cyan);text-indent:.34em}
-  #boot .sub{font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);margin:0 0 26px}
-  #boot p.txt{font-size:11.5px;line-height:1.9;color:var(--dim);margin:0 0 20px;text-align:left}
-  #boot p.txt b{color:var(--cyan);font-weight:500}
-  #key,#model{width:100%;padding:13px;background:#071322;border:1px solid var(--cyan-dim);
-    color:var(--paper);font:inherit;font-size:11.5px;margin-bottom:9px}
-  #key{text-align:center}
-  #key:focus,#model:focus{outline:none;border-color:var(--cyan)}
-  #go{width:100%;margin-top:8px;appearance:none;cursor:pointer;font-family:"Rajdhani",sans-serif;
-    font-weight:700;font-size:14px;letter-spacing:.26em;text-transform:uppercase;padding:16px;
-    border:1px solid var(--cyan);background:transparent;color:var(--cyan);transition:.18s}
-  #go:hover{background:var(--cyan);color:var(--ink);box-shadow:0 0 24px rgba(77,225,242,.4)}
-  .note{font-size:9.5px;line-height:1.7;color:var(--faint);margin-top:16px}
-  .status{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--cyan);margin-top:14px;min-height:13px}
-  .err{color:var(--red)!important}
+  #boot{position:absolute;inset:0;z-index:20;display:grid;place-items:center;text-align:center;background:var(--ink)}
+  #boot .card{max-width:430px;padding:0 26px}
+  #boot p.txt{font-size:12px;line-height:1.8;color:var(--dim);margin:14px 0 24px}
+  .status{color:var(--signal);font-size:10px;letter-spacing:.28em;text-transform:uppercase;margin-top:20px}
+  #boot button{appearance:none;cursor:pointer;font:inherit;font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;font-weight:600;padding:14px 28px;border:1px solid var(--signal);
+    background:transparent;color:var(--signal);transition:background .18s,color .18s}
+  #boot button:hover{background:var(--signal);color:var(--ink)}
   #boot.hidden{display:none}
+  .err{color:var(--hot)!important}
 
-  @media (max-width:600px){
-    #bar{top:16px;padding:7px 12px;gap:8px}
-    #state{font-size:10px;letter-spacing:.16em}
-    #heard{top:54px;font-size:10.5px}
-    #card{bottom:74px;padding:13px 15px}
-    #c-a{font-size:16px}
-    .tools button{padding:11px 10px;font-size:9px;letter-spacing:.08em}
-    .bracket{width:22px;height:22px}
-    #boot h1{font-size:32px}
+  @media (max-width:760px){
+    header{top:14px;left:16px;max-width:58vw}
+    h1{font-size:22px;margin-bottom:8px}
+    .legend{font-size:10px;line-height:1.6}
+    .readout{left:16px;bottom:92px;width:172px;padding:10px 12px;font-size:10px}
+    .shapes{bottom:16px;padding:3px;gap:1px}
+    .shapes button{padding:10px 10px;letter-spacing:0}
+    .shapes button span{display:none}
+    #quality{top:14px;right:14px;padding:8px 10px;font-size:9px}
+    #grid{display:none}
   }
-  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <div id="stage">
   <video id="cam" playsinline muted autoplay></video>
-  <canvas id="hud"></canvas>
-  <div id="shade"></div>
-  <div id="scan"></div>
-  <div class="bracket tl"></div><div class="bracket tr"></div>
-  <div class="bracket bl"></div><div class="bracket br"></div>
+  <canvas id="gl"></canvas>
+  <canvas id="skeleton"></canvas>
+  <div id="grid"></div>
+  <div id="vignette"></div>
 
-  <div id="bar">
-    <span id="pulse"></span>
-    <span id="state">En espera</span>
-    <span id="count">0 consultas</span>
+  <header>
+    <p class="eyebrow">Instrumento reactivo</p>
+    <h1>Campo de<br>partículas</h1>
+    <p class="legend">
+      <b>1 dedo</b> <em>esfera</em> · <b>2</b> <em>cubo</em> · <b>3</b> <em>toro</em> · <b>4</b> <em>pirámide</em><br>
+      <b>Palma abierta</b> — mueve y rota.<br>
+      <b>Puño</b> — comprime y carga. <b>Abre</b> — estalla.<br>
+      <b>Pellizco</b> — vórtice y cambio de color.<br>
+      <b>Dos manos</b> — separa para escalar.
+    </p>
+  </header>
+
+  <button id="quality">Calidad: alta</button>
+
+  <div class="readout">
+    <div class="row"><span class="k">Forma</span><span class="v" id="r-shape">Esfera</span></div>
+    <div class="row"><span class="k">Manos</span><span class="v" id="r-hands">0</span></div>
+    <div class="row"><span class="k">Dedos</span><span class="v" id="r-fingers">—</span></div>
+    <div class="row"><span class="k">Gesto</span><span class="v sig" id="r-gesture">en espera</span></div>
+    <div class="row"><span class="k">FPS</span><span class="v" id="r-fps">—</span></div>
+    <div id="bar"><i id="bar-fill"></i></div>
   </div>
 
-  <div id="heard"></div>
-
-  <div id="card">
-    <p id="c-q">—</p>
-    <p id="c-a"></p>
-  </div>
-
-  <div class="tools">
-    <button id="t-mic" class="on">Micro</button>
-    <button id="t-voice" class="on">Voz</button>
-    <button id="t-flip">Cámara</button>
-    <button id="t-shot">Analizar</button>
-  </div>
+  <nav class="shapes" id="shapes" aria-label="Selector de forma">
+    <button data-shape="0" aria-pressed="true"><i>1</i><span>Esfera</span></button>
+    <button data-shape="1" aria-pressed="false"><i>2</i><span>Cubo</span></button>
+    <button data-shape="2" aria-pressed="false"><i>3</i><span>Toro</span></button>
+    <button data-shape="3" aria-pressed="false"><i>4</i><span>Pirámide</span></button>
+    <button data-shape="4" aria-pressed="false"><i>5</i><span>Galaxia</span></button>
+    <button data-shape="5" aria-pressed="false"><i>6</i><span>Hélice</span></button>
+  </nav>
 
   <div id="boot">
     <div class="card">
-      <h1>JARVIS</h1>
-      <p class="sub">Asistente visual · Groq</p>
-      <p class="txt">
-        Di <b>«Jarvis»</b> y luego tu pregunta: <i>Jarvis, ¿qué hay encima de la mesa?</i><br>
-        O <b>apunta con el índice</b> a un objeto y mantén el dedo quieto.<br>
-        Solo se consulta a la API cuando dices la palabra clave. Nada más gasta créditos.
-      </p>
-      <input id="key" type="password" placeholder="API key de Groq (gsk_…)" autocomplete="off" />
-      <select id="model"><option value="">Modelo — se carga con tu key</option></select>
-      <button id="go">Iniciar sistema</button>
-      <p class="note">Se pedirán cámara y micrófono a la vez. Este toque también desbloquea el altavoz. La clave se guarda solo en este dispositivo.</p>
-      <p class="status" id="status"></p>
+      <p class="eyebrow">Instrumento reactivo</p>
+      <h1>Campo de<br>partículas</h1>
+      <p class="txt">Necesita tu cámara. El vídeo no sale de este dispositivo: el rastreo de manos se ejecuta dentro del navegador.</p>
+      <button id="start">Activar cámara</button>
+      <p class="status" id="status">Listo</p>
     </div>
   </div>
 </div>
 
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.161.0/build/three.module.js" } }
+</script>
+
 <script type="module">
+import * as THREE from 'three';
 import { HandLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 
 const $ = id => document.getElementById(id);
-const video = $('cam'), hud = $('hud'), ctx = hud.getContext('2d');
-const LS = { key: 'groq_key', model: 'groq_model' };
+const video = $('cam'), boot = $('boot'), statusEl = $('status');
+const MOBILE = matchMedia('(pointer:coarse)').matches;
 
-let KEY = '', MODEL = '', landmarker = null;
-let mirrored = false, facing = 'environment';
-let busy = false, cooldown = 0, queries = 0;
-let micOn = true, speaking = false;
+/* ═══ 1 · RENDER ═══ */
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), alpha: true, antialias: false, powerPreference: 'high-performance' });
+const DPR = Math.min(devicePixelRatio, MOBILE ? 1.5 : 2);
+renderer.setPixelRatio(DPR);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, .1, 100);
+camera.position.z = 5;
 
-/* ══ estado del HUD ══ */
-function setState(s, cls) {
-  $('state').textContent = s;
-  $('pulse').className = cls || '';
-}
+const MAX = MOBILE ? 9000 : 18000;
+let live = MAX;                                   // partículas dibujadas (calidad)
 
-/* ══ SALIDA DE VOZ ══ */
-const SS = ('speechSynthesis' in window && window.SpeechSynthesisUtterance) ? speechSynthesis : null;
-const TTS = {
-  on: !!SS, ok: !!SS, voice: null,
-  pick() { if (!SS) return; const v = SS.getVoices() || [];
-    this.voice = v.find(x => /^es-(MX|419|US)/i.test(x.lang)) || v.find(x => /^es/i.test(x.lang)) || v[0] || null; },
-  unlock() { if (!SS) return; try { this.pick();
-    const u = new SpeechSynthesisUtterance('Sistema en línea');
-    if (this.voice) u.voice = this.voice; u.lang = this.voice?.lang || 'es-ES';
-    SS.speak(u); } catch (e) {} },
-  say(t) {
-    if (!SS || !this.on || !t) return;
-    try {
-      SS.cancel();
-      const u = new SpeechSynthesisUtterance(t);
-      if (!this.voice) this.pick();
-      if (this.voice) u.voice = this.voice;
-      u.lang = this.voice?.lang || 'es-ES'; u.rate = 1.05;
-      // el micro se apaga mientras habla, o se oiría a sí mismo
-      u.onstart = () => { speaking = true; ASR.pause(); setState('Respondiendo', 'talk'); };
-      u.onend   = () => { speaking = false; ASR.resume(); idle(); };
-      SS.speak(u);
-    } catch (e) { speaking = false; ASR.resume(); }
-  },
-  hush() { if (SS) { try { SS.cancel(); } catch (e) {} } speaking = false; ASR.resume(); }
+/* ═══ 2 · FORMAS ═══ */
+const rnd = () => Math.random() * 2 - 1;
+const SHAPES = {
+  0: (i, n) => { const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(Math.max(0, 1 - y * y)), t = i * 2.399963;
+    return [Math.cos(t) * r * 1.15, y * 1.15, Math.sin(t) * r * 1.15]; },
+  1: i => { const s = 1.05, f = i % 6, u = rnd() * s, v = rnd() * s;
+    return [[s,u,v],[-s,u,v],[u,s,v],[u,-s,v],[u,v,s],[u,v,-s]][f]; },
+  2: (i, n) => { const R = .95, r = .38, a = (i / n) * 43.98 % 6.283, b = Math.random() * 6.283;
+    return [(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)]; },
+  3: () => { const h = 1.35, s = 1.15, apex = [0, h * .62, 0];
+    const base = [[-s,-h*.38,-s],[s,-h*.38,-s],[s,-h*.38,s],[-s,-h*.38,s]];
+    const f = Math.floor(Math.random() * 5);
+    let A, B, C;
+    if (f === 4) { A = base[0]; if (Math.random() < .5) { B = base[1]; C = base[2]; } else { B = base[2]; C = base[3]; } }
+    else { A = apex; B = base[f]; C = base[(f + 1) % 4]; }
+    let u = Math.random(), v = Math.random(); if (u + v > 1) { u = 1 - u; v = 1 - v; }
+    return [0,1,2].map(k => A[k] + u * (B[k] - A[k]) + v * (C[k] - A[k])); },
+  4: (i, n) => { const arm = i % 3, t = Math.pow(i / n, .62), a = t * 7.2 + arm * 2.094 + (Math.random() - .5) * .55;
+    const r = t * 1.5 + .08, z = (Math.random() - .5) * (.14 + t * .06);
+    return [Math.cos(a) * r + rnd() * .05, z, Math.sin(a) * r + rnd() * .05]; },
+  5: (i, n) => { const t = (i / n) * 6.283 * 3, s = i % 2 ? 0 : Math.PI, y = (i / n - .5) * 2.5;
+    const r = .55 + (Math.random() - .5) * .07;
+    return [Math.cos(t + s) * r, y, Math.sin(t + s) * r]; }
 };
-if (SS?.addEventListener) SS.addEventListener('voiceschanged', () => TTS.pick());
+const HUE  = { 0: .50, 1: .08, 2: .72, 3: .34, 4: .60, 5: .90 };
+const NAME = { 0: 'Esfera', 1: 'Cubo', 2: 'Toro', 3: 'Pirámide', 4: 'Galaxia', 5: 'Hélice' };
 
-/* ══ ENTRADA DE VOZ ══ */
-const SRC = window.SpeechRecognition || window.webkitSpeechRecognition;
-const WAKE = /\b(jarvis|yarvis|harvis|charbis|charvis|jarbis)\b/i;
+/* ═══ 3 · GEOMETRÍA (la física vive en el shader) ═══ */
+const aA = new Float32Array(MAX * 3);   // forma de origen
+const aB = new Float32Array(MAX * 3);   // forma de destino
+const aDir = new Float32Array(MAX * 3); // dirección de la explosión
+const aSeed = new Float32Array(MAX);
+const aTone = new Float32Array(MAX);
+for (let i = 0; i < MAX; i++) { aSeed[i] = Math.random() * 6.283; aTone[i] = Math.random(); }
 
-const ASR = {
-  rec: null, want: false, ok: !!SRC,
-  start() {
-    if (!SRC) return;
-    this.want = true;
-    if (this.rec) return;
-    const r = new SRC();
-    r.lang = 'es-ES'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-    r.onresult = e => {
-      let interim = '', final = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t; else interim += t;
-      }
-      const live = (final || interim).trim();
-      if (live) { $('heard').textContent = '« ' + live + ' »'; $('heard').classList.add('show'); }
-      if (final && !speaking) handleSpeech(final.trim());
-    };
-    r.onend = () => {                       // se corta sola: hay que reanimarla
-      this.rec = null;
-      if (this.want && !speaking) setTimeout(() => this.start(), 250);
-    };
-    r.onerror = ev => {
-      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-        this.want = false; this.ok = false;
-        $('t-mic').classList.remove('on'); $('t-mic').textContent = 'Sin micro';
-      }
-    };
-    try { r.start(); this.rec = r; } catch (e) { this.rec = null; }
-  },
-  pause() { this.want = false; try { this.rec?.abort(); } catch (e) {} this.rec = null; },
-  resume() { if (micOn && this.ok) this.start(); },
-  stop() { micOn = false; this.pause(); }
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX * 3), 3)); // sin usar, exigido por three
+geo.setAttribute('aA',   new THREE.BufferAttribute(aA, 3));
+geo.setAttribute('aB',   new THREE.BufferAttribute(aB, 3));
+geo.setAttribute('aDir', new THREE.BufferAttribute(aDir, 3));
+geo.setAttribute('aSeed', new THREE.BufferAttribute(aSeed, 1));
+geo.setAttribute('aTone', new THREE.BufferAttribute(aTone, 1));
+
+const U = {
+  uTime:  { value: 0 },
+  uMorph: { value: 1 },
+  uCharge:{ value: 0 },
+  uBlast: { value: 0 },
+  uSpin:  { value: 0 },
+  uHue:   { value: HUE[0] },
+  uSize:  { value: MOBILE ? .075 : .062 },
+  uDpr:   { value: DPR }
 };
 
-function handleSpeech(text) {
-  if (!WAKE.test(text)) return;                        // sin palabra clave, no se gasta nada
-  const q = text.replace(WAKE, '').replace(/^[\s,.:;¿?¡!-]+/, '').trim();
-  $('heard').textContent = '« ' + text + ' »';
-  ask(null, q || '¿Qué ves en la escena?');
-}
-
-/* ══ MODELOS DE GROQ ══ */
-const VIS = /scout|maverick|qwen3\.?6|vision|llava|omni/i;
-async function loadModels(key) {
-  const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: 'Bearer ' + key } });
-  if (!r.ok) throw new Error('Key inválida (' + r.status + ')');
-  const ids = (await r.json()).data.map(m => m.id).sort();
-  const sel = $('model'); sel.innerHTML = '';
-  for (const id of ids) {
-    const o = document.createElement('option');
-    o.value = id; o.textContent = id + (VIS.test(id) ? '  · visión' : '');
-    sel.appendChild(o);
-  }
-  const saved = localStorage.getItem(LS.model);
-  sel.value = (saved && ids.includes(saved)) ? saved : (ids.find(i => VIS.test(i)) || ids[0]);
-  return sel.value;
-}
-$('key').value = localStorage.getItem(LS.key) || '';
-$('key').addEventListener('change', async e => {
-  const k = e.target.value.trim(); if (k.length < 20) return;
-  $('status').classList.remove('err'); $('status').textContent = 'Verificando…';
-  try { await loadModels(k); $('status').textContent = 'Key válida'; }
-  catch (err) { $('status').classList.add('err'); $('status').textContent = err.message; }
+const mat = new THREE.ShaderMaterial({
+  uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: /* glsl */`
+    uniform float uTime,uMorph,uCharge,uBlast,uSpin,uHue,uSize,uDpr;
+    attribute vec3 aA,aB,aDir; attribute float aSeed,aTone;
+    varying vec3 vCol; varying float vE;
+    vec3 hsl2rgb(vec3 c){
+      vec3 k = clamp(abs(mod(c.x*6.+vec3(0.,4.,2.),6.)-3.)-1.,0.,1.);
+      return c.z + c.y*(k-.5)*(1.-abs(2.*c.z-1.));
+    }
+    void main(){
+      float m = uMorph*uMorph*(3.-2.*uMorph);          // suavizado del cambio de forma
+      vec3 p = mix(aA,aB,m);
+      float w = .012*(1.+uCharge*4.);                  // temblor orgánico
+      p += vec3(sin(uTime*1.7+aSeed),cos(uTime*1.4+aSeed*1.3),sin(uTime*1.9+aSeed*.7))*w;
+      p *= 1.-uCharge*.55;                             // el puño comprime
+      float s = sin(uSpin), c = cos(uSpin);            // giro interno / vórtice
+      p = vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z);
+      p += aDir * uBlast * 1.9;                        // explosión
+      vE = uCharge + uBlast*.55;
+      vCol = hsl2rgb(vec3(fract(uHue + aTone*.07 + uBlast*.06), .8, .48 + aTone*.26 + uCharge*.22));
+      vec4 mv = modelViewMatrix * vec4(p,1.);
+      gl_Position = projectionMatrix * mv;
+      gl_PointSize = uSize * uDpr * (1.+uCharge*.7) * (300./max(.1,-mv.z));
+    }`,
+  fragmentShader: /* glsl */`
+    precision mediump float;
+    varying vec3 vCol; varying float vE;
+    void main(){
+      float d = length(gl_PointCoord - .5);
+      if(d > .5) discard;
+      float a = pow(smoothstep(.5,0.,d), 2.0);
+      gl_FragColor = vec4(vCol*(1.+vE*.7), a);
+    }`
 });
-if ($('key').value) $('key').dispatchEvent(new Event('change'));
+const points = new THREE.Points(geo, mat);
+points.frustumCulled = false;
+scene.add(points);
 
-/* ══ CÁMARA (con el espejo bien puesto) ══ */
-async function openCamera(mode) {
-  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-  const s = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false
-  });
-  video.srcObject = s;
-  await video.play();
-  // el navegador manda: preguntamos qué cámara nos dio de verdad
-  const real = s.getVideoTracks()[0]?.getSettings()?.facingMode;
-  facing = real || mode;
-  mirrored = (facing === 'user');                     // solo la frontal se refleja
-  video.style.transform = mirrored ? 'scaleX(-1)' : 'none';
+/* Cambio de forma: horneamos la posición interpolada actual en A y ponemos la nueva en B */
+let current = 0, hueFrom = HUE[0], hueTo = HUE[0];
+function setShape(idx) {
+  if (idx === current) return;
+  const m = U.uMorph.value, sm = m * m * (3 - 2 * m);
+  for (let i = 0; i < MAX; i++) {
+    const j = i * 3;
+    aA[j]   += (aB[j]   - aA[j])   * sm;
+    aA[j+1] += (aB[j+1] - aA[j+1]) * sm;
+    aA[j+2] += (aB[j+2] - aA[j+2]) * sm;
+    const p = SHAPES[idx](i, MAX);
+    aB[j] = p[0]; aB[j+1] = p[1]; aB[j+2] = p[2];
+    const L = Math.hypot(p[0], p[1], p[2]) || 1;                 // explosión radial + ruido
+    aDir[j]   = p[0]/L * .75 + rnd() * .25;
+    aDir[j+1] = p[1]/L * .75 + rnd() * .25;
+    aDir[j+2] = p[2]/L * .75 + rnd() * .25;
+  }
+  geo.attributes.aA.needsUpdate = geo.attributes.aB.needsUpdate = geo.attributes.aDir.needsUpdate = true;
+  U.uMorph.value = 0;
+  hueFrom = U.uHue.value; hueTo = HUE[idx];
+  current = idx;
+  $('r-shape').textContent = NAME[idx];
+  [...$('shapes').children].forEach((b, k) => b.setAttribute('aria-pressed', k === idx));
 }
+// siembra inicial
+(function seed0(){
+  for (let i = 0; i < MAX; i++) {
+    const j = i * 3, p = SHAPES[0](i, MAX), a = Math.random()*6.283, b = Math.random()*6.283;
+    aA[j] = Math.cos(a)*2.6; aA[j+1] = Math.sin(b)*2.6; aA[j+2] = Math.sin(a)*2.6;
+    aB[j] = p[0]; aB[j+1] = p[1]; aB[j+2] = p[2];
+    const L = Math.hypot(p[0],p[1],p[2]) || 1;
+    aDir[j] = p[0]/L*.75 + rnd()*.25; aDir[j+1] = p[1]/L*.75 + rnd()*.25; aDir[j+2] = p[2]/L*.75 + rnd()*.25;
+  }
+  U.uMorph.value = 0;
+})();
+geo.setDrawRange(0, live);
 
-/* ══ ARRANQUE ══ */
-$('go').addEventListener('click', async () => {
-  KEY = $('key').value.trim();
-  if (KEY.length < 20) { $('status').classList.add('err'); $('status').textContent = 'Falta la API key'; return; }
-  TTS.unlock();                                       // el altavoz se desbloquea con este toque
+/* ═══ 4 · ESTADO ═══ */
+const S = {
+  hands: 0, fingers: 0, gesture: 'en espera', charge: 0, blast: 0, spin: 0, pinch: 0,
+  scale: 1, tScale: 1,
+  pos: new THREE.Vector3(), tPos: new THREE.Vector3(),
+  quat: new THREE.Quaternion(), tQuat: new THREE.Quaternion(),
+  spanBase: null, want: -1, wantT: 0, prevF: 5
+};
+const ease = (k, dt) => 1 - Math.pow(1 - k, dt * 60);   // suavizado independiente de los FPS
+
+/* ═══ 5 · MEDIAPIPE ═══ */
+let landmarker = null, lastT_v = -1;
+async function start() {
   try {
-    $('status').classList.remove('err'); $('status').textContent = 'Solicitando micrófono…';
-    try {                                             // permiso de micro: se pide una vez y queda
-      const m = await navigator.mediaDevices.getUserMedia({ audio: true });
-      m.getTracks().forEach(t => t.stop());           // lo soltamos: lo usará el reconocedor
-    } catch (e) { micOn = false; $('t-mic').classList.remove('on'); $('t-mic').textContent = 'Sin micro'; }
-
-    $('status').textContent = 'Solicitando cámara…';
-    await openCamera('environment');
-
-    if (!$('model').value) await loadModels(KEY);
-    MODEL = $('model').value;
-    localStorage.setItem(LS.key, KEY); localStorage.setItem(LS.model, MODEL);
-
-    $('status').textContent = 'Cargando rastreo de manos…';
+    statusEl.classList.remove('err'); statusEl.textContent = 'Pidiendo cámara…';
+    video.srcObject = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: MOBILE ? 640 : 960 }, height: { ideal: MOBILE ? 480 : 540 },
+               frameRate: { ideal: 30 }, facingMode: 'user' }, audio: false });
+    await video.play();
+    statusEl.textContent = 'Cargando modelo…';
     const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
     landmarker = await HandLandmarker.createFromOptions(files, {
       baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate: 'GPU' },
-      runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: .5, minTrackingConfidence: .5
+      runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: .5, minTrackingConfidence: .5
     });
-
-    $('boot').classList.add('hidden');
-    resize(); loop();
-    if (micOn) ASR.start();
-    idle();
-    TTS.say('Sistema en línea. Di Jarvis y tu pregunta.');
+    boot.classList.add('hidden'); resize(); loop();
   } catch (e) {
-    $('status').classList.add('err');
-    $('status').textContent = (e.name || 'Error') + ' — ' + (e.message || e);
-  }
-});
-function idle() {
-  if (busy) return;
-  setState(micOn && ASR.ok ? 'Escuchando' : 'Listo', micOn && ASR.ok ? 'live' : '');
-}
-
-/* ══ CAPTURA Y CONSULTA ══ */
-const buf = document.createElement('canvas'), bctx = buf.getContext('2d');
-function grab(target) {
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (target) {                                       // recorte alrededor de lo señalado
-    const side = Math.round(Math.min(vw, vh) * .5);
-    let cx = Math.min(vw - side/2, Math.max(side/2, target.x * vw));
-    let cy = Math.min(vh - side/2, Math.max(side/2, target.y * vh));
-    buf.width = buf.height = 448;
-    bctx.drawImage(video, cx - side/2, cy - side/2, side, side, 0, 0, 448, 448);
-  } else {                                            // escena completa
-    const w = 640, h = Math.round(640 * vh / vw);
-    buf.width = w; buf.height = h;
-    bctx.drawImage(video, 0, 0, w, h);
-  }
-  return buf.toDataURL('image/jpeg', .72);            // calidad justa: menos bytes, menos coste
-}
-
-const SYS = `Eres JARVIS, un asistente visual. Miras por una cámara.
-Responde SIEMPRE en español, en MÁXIMO 2 frases y 30 palabras. Directo, sin preámbulos, sin repetir la pregunta.
-Si no distingues algo, dilo en una frase.`;
-
-async function ask(target, question) {
-  if (busy || !KEY) return;
-  busy = true; cooldown = 1.6;
-  setState('Analizando', 'think');
-  $('c-q').textContent = question;
-  $('c-a').textContent = '…';
-  $('card').classList.remove('err'); $('card').classList.add('show');
-  try {
-    const img = grab(target);
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + KEY },
-      body: JSON.stringify({
-        model: MODEL, temperature: .25, max_tokens: 90,      // techo bajo: cuida los créditos
-        messages: [
-          { role: 'system', content: SYS },
-          { role: 'user', content: [
-            { type: 'text', text: question },
-            { type: 'image_url', image_url: { url: img } }
-          ]}
-        ]
-      })
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error?.message || ('HTTP ' + r.status));
-    const a = (j.choices?.[0]?.message?.content || '').trim() || 'Sin respuesta.';
-    $('c-a').textContent = a;
-    $('count').textContent = (++queries) + (queries === 1 ? ' consulta' : ' consultas');
-    TTS.say(a);
-    if (!TTS.on || !SS) idle();
-  } catch (e) {
-    $('card').classList.add('err');
-    $('c-a').textContent = e.message;
-    idle();
-  } finally {
-    busy = false;
+    statusEl.classList.add('err');
+    statusEl.textContent = (e.name || 'Error') + ' — ' + (e.message || e);
+    console.error(e);
   }
 }
+$('start').addEventListener('click', start);
 
-/* ══ MANO ══ */
+/* ═══ 6 · LECTURA DE LA MANO ═══ */
 const TIP = [4,8,12,16,20], PIP = [3,6,10,14,18];
 const d3 = (a,b) => Math.hypot(a.x-b.x, a.y-b.y, a.z-b.z);
-function gest(w) {
-  const up = f => d3(w[TIP[f]], w[0]) > d3(w[PIP[f]], w[0]) * 1.06;
-  const i = up(1), m = up(2), r = up(3), p = up(4);
-  return { point: i && !m && !r && !p, fist: !i && !m && !r && !p };
+function fingersUp(w) {
+  let n = 0;
+  for (let f = 0; f < 5; f++) {
+    const ref = f === 0 ? w[17] : w[0];
+    if (d3(w[TIP[f]], ref) > d3(w[PIP[f]], ref) * 1.05) n++;
+  }
+  return n;
 }
-function aim(lm) {                                     // el objeto está más allá de la yema
-  const a = lm[6], b = lm[8], K = 1.7;
-  return { x: Math.min(.97, Math.max(.03, b.x + (b.x - a.x) * K)),
-           y: Math.min(.97, Math.max(.03, b.y + (b.y - a.y) * K)) };
+function isPinch(w) {
+  const size = d3(w[0], w[9]) || 1;
+  return d3(w[4], w[8]) / size < .42 && d3(w[12], w[0]) / size < 1.15;   // pulgar+índice juntos, resto cerrado
+}
+const _r = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
+function handQuat(w) {
+  const V = (o,i) => o.set(-w[i].x, -w[i].y, -w[i].z);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3();
+  V(a,9); V(b,0); V(c,5); V(d,17);
+  _u.copy(a).sub(b).normalize();
+  _r.copy(c).sub(d).normalize();
+  _f.crossVectors(_r,_u).normalize();
+  _r.crossVectors(_u,_f).normalize();
+  _m.makeBasis(_r,_u,_f);
+  return _q.setFromRotationMatrix(_m);
 }
 
+/* ═══ 7 · ESQUELETO ═══ */
+const sk = $('skeleton'), sctx = sk.getContext('2d');
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
                [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-let hold = 0, last = performance.now(), lastVT = -1, spin = 0;
-const HOLD = .8;
+function drawSkeleton(hands) {
+  const w = sk.width, h = sk.height;
+  sctx.clearRect(0,0,w,h);
+  if (!hands.length || !video.videoWidth) return;
+  const vr = video.videoWidth / video.videoHeight, cr = w / h;
+  const sx = vr > cr ? cr / vr : 1, sy = vr > cr ? 1 : vr / cr;
+  const X = p => (.5 + (.5 - p.x) / sx) * w, Y = p => (.5 + (p.y - .5) / sy) * h;
+  sctx.lineWidth = 1.2; sctx.strokeStyle = 'rgba(87,224,214,.45)';
+  for (const lm of hands) {
+    sctx.beginPath();
+    for (const [a,b] of BONES) { sctx.moveTo(X(lm[a]), Y(lm[a])); sctx.lineTo(X(lm[b]), Y(lm[b])); }
+    sctx.stroke();
+    sctx.fillStyle = 'rgba(232,230,223,.8)';
+    for (const p of lm) { sctx.beginPath(); sctx.arc(X(p), Y(p), 2.2, 0, 6.29); sctx.fill(); }
+  }
+}
+
+/* ═══ 8 · BUCLE ═══ */
+let last = performance.now(), fps = 60, frames = 0, fpsT = last, skFlip = 0;
+const viewH = 2 * 5 * Math.tan(THREE.MathUtils.degToRad(25));
 
 function loop() {
   requestAnimationFrame(loop);
-  const now = performance.now(), dt = Math.min((now - last) / 1000, .05); last = now;
-  cooldown = Math.max(0, cooldown - dt); spin += dt;
+  const now = performance.now();
+  const dt = Math.min((now - last) / 1000, .05); last = now;
 
-  if (!landmarker || video.readyState < 2 || video.currentTime === lastVT) return;
-  lastVT = video.currentTime;
+  if (landmarker && video.readyState >= 2 && video.currentTime !== lastT_v) {
+    lastT_v = video.currentTime;
+    const res = landmarker.detectForVideo(video, now);
+    const lms = res.landmarks || [], wl = res.worldLandmarks || [];
+    S.hands = lms.length;
+    if ((skFlip = 1 - skFlip)) drawSkeleton(lms);       // el esqueleto se redibuja a media tasa
 
-  const res = landmarker.detectForVideo(video, now);
-  const lm = res.landmarks?.[0], w = res.worldLandmarks?.[0];
-  const W = hud.width, H = hud.height;
-  ctx.clearRect(0, 0, W, H);
-  if (!lm) { hold = 0; return; }
+    if (S.hands) {
+      const w0 = wl[0], f = fingersUp(w0), pinch = isPinch(w0);
+      S.fingers = f;
+      const palm = lms[0][9], viewW = viewH * (innerWidth / innerHeight);
+      S.tPos.set((.5 - palm.x) * viewW * 1.05, (.5 - palm.y) * viewH * 1.05, 0);
+      S.tQuat.copy(handQuat(w0));
 
-  // encaje con object-fit:cover; el espejo solo si la cámara es frontal
-  const vr = video.videoWidth / video.videoHeight, cr = W / H;
-  const sx = vr > cr ? cr / vr : 1, sy = vr > cr ? 1 : vr / cr;
-  const X = p => (mirrored ? (.5 + (.5 - p.x) / sx) : (.5 + (p.x - .5) / sx)) * W;
-  const Y = p => (.5 + (p.y - .5) / sy) * H;
+      if (S.hands === 2) {                                            // ── escalar
+        const span = Math.hypot(lms[0][9].x - lms[1][9].x, lms[0][9].y - lms[1][9].y);
+        if (S.spanBase === null) S.spanBase = span;
+        S.tScale = THREE.MathUtils.clamp(span / S.spanBase, .35, 2.8);
+        S.gesture = 'escalar'; S.want = -1;
+      } else if (pinch) {                                             // ── vórtice
+        S.spanBase = null; S.pinch = Math.min(1, S.pinch + dt * 4);
+        U.uHue.value = (U.uHue.value + dt * .22) % 1; hueTo = U.uHue.value;
+        S.gesture = 'vórtice'; S.want = -1;
+        S.charge = Math.max(0, S.charge - dt * 2);
+      } else if (f <= 1 && !pinch && f === 0) {                       // ── puño: cargar
+        S.spanBase = null;
+        S.charge = Math.min(1, S.charge + dt * 1.8);
+        S.gesture = 'cargando'; S.want = -1;
+      } else {
+        S.spanBase = null;
+        if (S.prevF === 0 && f >= 3 && S.charge > .12) {              // ── soltar: estallido
+          S.blast = S.charge * 1.5; S.gesture = 'explosión'; S.want = -1;
+        } else if (f >= 1 && f <= 4) {                                // ── dedos: elegir forma
+          const want = f - 1;
+          if (want !== current) {
+            if (S.want !== want) { S.want = want; S.wantT = 0; }
+            S.wantT += dt;
+            S.gesture = 'forma → ' + NAME[want];
+            if (S.wantT > .45) { setShape(want); S.want = -1; }
+          } else { S.want = -1; S.gesture = NAME[current]; }
+        } else {
+          S.want = -1;
+          if (S.blast < .15) S.gesture = 'mover / rotar';
+        }
+        S.charge = Math.max(0, S.charge - dt * 2.4);
+      }
+      if (!pinch) S.pinch = Math.max(0, S.pinch - dt * 4);
+      S.prevF = f;
+    } else {
+      S.fingers = 0; S.spanBase = null; S.want = -1;
+      S.charge = Math.max(0, S.charge - dt * 1.5);
+      S.pinch  = Math.max(0, S.pinch - dt * 3);
+      S.tPos.set(0, 0, 0);
+      S.tQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), now * .0002);
+      S.gesture = 'en espera';
+    }
+  }
 
-  ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(77,225,242,.42)';
-  ctx.beginPath();
-  for (const [a,b] of BONES) { ctx.moveTo(X(lm[a]), Y(lm[a])); ctx.lineTo(X(lm[b]), Y(lm[b])); }
-  ctx.stroke();
+  /* transiciones suaves, medidas en segundos y no en fotogramas */
+  S.pos.lerp(S.tPos, ease(.16, dt));
+  S.quat.slerp(S.tQuat, ease(.15, dt));
+  S.scale += (S.tScale - S.scale) * ease(.13, dt);
+  points.position.copy(S.pos);
+  points.quaternion.copy(S.quat);
+  points.scale.setScalar(S.scale);
 
-  const g = gest(w);
-  if (g.fist) { TTS.hush(); $('card').classList.remove('show'); $('heard').classList.remove('show'); hold = 0; idle(); return; }
+  S.blast = Math.max(0, S.blast - dt * 1.15);
+  S.spin += dt * (.12 + S.pinch * 3.4 + S.blast * 1.6);
 
-  if (g.point && !busy && cooldown === 0) {
-    hold += dt;
-    const t = aim(lm), px = X(t), py = Y(t), R = 32, prog = Math.min(1, hold / HOLD);
+  U.uTime.value   = now * .001;
+  U.uCharge.value += (S.charge - U.uCharge.value) * ease(.2, dt);
+  U.uBlast.value  += (S.blast  - U.uBlast.value)  * ease(.35, dt);
+  U.uSpin.value   = S.spin;
+  U.uMorph.value  = Math.min(1, U.uMorph.value + dt * 1.35);
+  U.uHue.value    = hueFrom + (hueTo - hueFrom) * (U.uMorph.value * U.uMorph.value * (3 - 2 * U.uMorph.value));
 
-    ctx.strokeStyle = 'rgba(77,225,242,.28)'; ctx.lineWidth = 1;   // anillos giratorios
-    ctx.beginPath(); ctx.arc(px, py, R + 10, spin, spin + 2.2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(px, py, R + 10, spin + 3.14, spin + 5.34); ctx.stroke();
-    ctx.beginPath(); ctx.arc(px, py, R, 0, 6.283); ctx.stroke();
-    ctx.strokeStyle = '#4DE1F2'; ctx.lineWidth = 3;                 // progreso
-    ctx.beginPath(); ctx.arc(px, py, R, -1.571, -1.571 + 6.283 * prog); ctx.stroke();
-    ctx.lineWidth = 1.4;                                            // cruz
-    ctx.beginPath(); ctx.moveTo(px-9, py); ctx.lineTo(px+9, py);
-    ctx.moveTo(px, py-9); ctx.lineTo(px, py+9); ctx.stroke();
-    ctx.strokeStyle = 'rgba(77,225,242,.2)'; ctx.lineWidth = 1;     // haz desde el dedo
-    ctx.beginPath(); ctx.moveTo(X(lm[8]), Y(lm[8])); ctx.lineTo(px, py); ctx.stroke();
+  frames++;
+  if (now - fpsT > 400) {
+    fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now;
+    $('r-fps').textContent = fps;
+    $('r-hands').textContent = S.hands;
+    $('r-fingers').textContent = S.hands ? S.fingers : '—';
+  }
+  $('r-gesture').textContent = S.gesture;
+  $('bar-fill').style.width = Math.round(Math.max(S.charge, S.blast * .7) * 100) + '%';
 
-    if (hold >= HOLD) { hold = 0; ask(t, '¿Qué es este objeto? Nómbralo y añade un dato útil.'); }
-  } else hold = 0;
+  renderer.render(scene, camera);
 }
 
-/* ══ CONTROLES ══ */
-$('t-mic').addEventListener('click', e => {
-  if (!ASR.ok) return;
-  micOn = !micOn;
-  e.target.classList.toggle('on', micOn);
-  micOn ? ASR.start() : ASR.pause();
-  idle();
-});
-$('t-voice').addEventListener('click', e => {
-  if (!TTS.ok) return;
-  TTS.on = !TTS.on; e.target.classList.toggle('on', TTS.on);
-  if (!TTS.on) TTS.hush();
-});
-$('t-flip').addEventListener('click', async () => {
-  await openCamera(facing === 'user' ? 'environment' : 'user');
-});
-$('t-shot').addEventListener('click', () => ask(null, '¿Qué ves? Descríbelo en una frase.'));
+/* ═══ 9 · CONTROLES ═══ */
+$('shapes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setShape(+b.dataset.shape); });
+addEventListener('keydown', e => { if (e.key >= '1' && e.key <= '6') setShape(+e.key - 1); });
 
-function resize() { hud.width = innerWidth; hud.height = innerHeight; }
+const LEVELS = [['alta', 1], ['media', .5], ['baja', .25]];
+let lv = 0;
+$('quality').addEventListener('click', () => {
+  lv = (lv + 1) % 3;
+  live = Math.floor(MAX * LEVELS[lv][1]);
+  geo.setDrawRange(0, live);
+  U.uSize.value = (MOBILE ? .075 : .062) * (lv === 0 ? 1 : lv === 1 ? 1.25 : 1.6);
+  $('quality').textContent = 'Calidad: ' + LEVELS[lv][0];
+});
+if (MOBILE) $('quality').click();                       // el móvil arranca en calidad media
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  sk.width = w; sk.height = h;                          // esqueleto a 1× : es solo una guía
+}
 addEventListener('resize', resize);
 resize();
 </script>
